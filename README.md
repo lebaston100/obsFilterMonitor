@@ -8,7 +8,7 @@ This tool shows if one or multiple filters that you setup are enabled or disable
 
 ### Setup obs-websocket
 
-- Download the bs-websocket installer and run it
+- Download the obs-websocket installer and run it
 - Start OBS, open the "Tools" menu and select "websocket server settings"
 - Make sure that "Enable Websocket server" is checked, "Server Port" is 4444 and "Enable authentification" is unchecked
 - [Download this repository](https://github.com/lebaston100/obsFilterMonitor/archive/master.zip) or clone it (you only need the monitor.html file)
