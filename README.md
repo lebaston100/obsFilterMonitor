@@ -8,9 +8,10 @@ This tool shows if one or multiple filters that you setup are enabled or disable
 
 ### Setup obs-websocket
 
-- Download the installer and run it
+- Download the bs-websocket installer and run it
 - Start OBS, open the "Tools" menu and select "websocket server settings"
 - Make sure that "Enable Websocket server" is checked, "Server Port" is 4444 and "Enable authentification" is unchecked
+- [Download this repository](https://github.com/lebaston100/obsFilterMonitor/archive/master.zip) or clone it (you only need the monitor.html file)
 
 ### Configuration
 
@@ -33,6 +34,7 @@ Other options that you can use/set:
 	- g_x_white (a white X)
 	- g_off_black (black "off" text)
 	- g_off_white (white "off" text)
+	- g_placeholder (no overlay, only color)
 - fallbackOnColor (line 30): This is the css color that is used for the -on- state when no "onColor" is set
 
 If you want to generate the css color codes, search google for "css color picker" and you will get a color picker. Just use the value displayed under "HEX" (please include the "#").
@@ -52,6 +54,10 @@ To create a custom dock that can be made part of the main OBS windows, follow th
 
 If you know what you are doing you can create a firewall exception for the obs-websocket port and modify the ip address in line 47 to be able to run this on any device in the network.
 
+You can create custom overlay symbols(the X or off text) by making a transparent 40x30 png image and then encoding it in base64. Then add that as a new variable and specify it as the defaultOffSymbol.
+
 ### Help
 
 You have trouble setting it up or found a bug, then join my [Discord Server](https://discord.gg/PCYQJwX)
+
+Thanks to [Strike](https://www.twitch.tv/strike) for the idea for this.
