@@ -81,6 +81,11 @@
 		};
 	}
 	
+	//on click event on an image
+	function imageClicked(element) {
+		websocket.send(JSON.stringify({"message-id": "filterUpdate", "request-type": "SetSourceFilterVisibility", "sourceName": element.getAttribute("s"), "filterName": element.getAttribute("f"), "filterEnabled": !JSON.parse(element.getAttribute("state"))}));
+	}
+	
 	//handle obs events that were requested by this script
 	function handleRequestedEvents(jsn) {
 		if (jsn["message-id"] == "initial-state-req") {					//Initial state for normal sources
@@ -132,6 +137,7 @@
 					element.src = defaultOffSymbol;
 					element.style.backgroundColor = defaultOffColor;
 				}
+				element.setAttribute("state", enabled);
 			}			
 		});
 	}
@@ -155,9 +161,9 @@
 			}
 			//Add image
 			if (item.hasOwnProperty("onColor")) {
-				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" c="${item["onColor"]}" src="" /></div>`;
+				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" c="${item["onColor"]}" src="" onclick="imageClicked(this);" /></div>`;
 			} else {
-				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" src="" /></div>`;
+				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" src="" onclick="imageClicked(this);" /></div>`;
 			}
 		});
 		document.getElementById("filterlist").innerHTML = lines;
