@@ -1,6 +1,6 @@
 This tool shows if one or multiple filters that you setup are enabled or disabled. Runs inside OBS custom browser docks or any modern web browser. You can also click on the status to toggle the filter.
 
-![Example image](https://www.lebaston100.de/data/lebcdn/git/obsfiltermonitor/example1.jpg)
+![Example image](https://cdn.lebaston100.de/git/obsfiltermonitor/example1.jpg)
 
 ### Requirements
 
