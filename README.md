@@ -4,7 +4,7 @@ This tool shows if one or multiple filters that you setup are enabled or disable
 
 ### Requirements
 
-- The [obs-websocket plugin](https://github.com/Palakis/obs-websocket/releases) (Version >= 4.7.0)
+- The [obs-websocket plugin](https://github.com/Palakis/obs-websocket/releases/tag/4.9.1) (only version 4.9.1)
 
 ### Setup obs-websocket
 
