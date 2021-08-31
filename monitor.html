@@ -64,7 +64,6 @@
 
 		websocket.onmessage = function(evt) {
 			var data = JSON.parse(evt.data);
-			//console.log(data);
 			
 			if (data.hasOwnProperty("update-type")) {
 				handleOBSevent(data);
@@ -91,6 +90,7 @@
 		if (jsn["message-id"] == "initial-state-req") {					//Initial state for normal sources
 			let checkedSources = [];
 			jsn.scenes.forEach((scene) => {
+				websocket.send(JSON.stringify({"message-id": `init-stat-${scene.name}`, "request-type": "GetSourceFilters", "sourceName": scene.name}));
 				scene.sources.forEach((source) => {
 					if (!(source.name in checkedSources)) {
 						websocket.send(JSON.stringify({"message-id": `init-stat-${source.name}`, "request-type": "GetSourceFilters", "sourceName": source.name}));
