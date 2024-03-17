@@ -1,11 +1,71 @@
+import os
 import obspython as obs
-from itertools import count
 import json 
 import os.path
+import http.server
+from socketserver import TCPServer
+import threading
+from threading import Thread
 
-template_file : str = script_path() + "/monitor_template.json"
-html_file : str = script_path() + "/monitor.html"
-config_file : str = script_path() + "/config.json"
+PORT = 6005
+config_file : str = os.path.relpath(__file__) + os.path.sep + "config.json"
+
+class ServerData:
+    def __init__(self) -> None:
+        self.server : TCPServer = None
+        self.obsProperties = None
+    
+    def shutdown(self):
+        if self.server: self.server.shutdown()
+
+SERVER_DATA : ServerData = ServerData()
+
+class SettingsRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        print("Received request: " + self.path)
+
+        # Extract any query parameters (e.g., 'imsi') from the URL
+        query_param = self.path
+        
+        if query_param != '/?settings':
+            self.send_error(404, "Invalid Request.", "Monitor config only supports settings requests.")
+            print("Request rejected.")
+            return
+
+        # Send a response back to the client
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(settings_as_dict(SERVER_DATA.obsProperties)).encode())
+        super().do_GET()
+        print("Request handled.")
+
+
+
+
+def main():
+    print('Attempting to start settings server...')
+    server_thread = threading.Thread(name="Settings server", target=lambda: serve_settings(SERVER_DATA))
+    server_thread.start()
+
+
+
+
+def serve_settings(data : ServerData):
+    with TCPServer(("", PORT), SettingsRequestHandler) as service:
+        data.server = service
+
+        print(f"Serving on port {PORT}")
+        service.serve_forever()
+
+
+
+
+def script_unload():
+    SERVER_DATA.shutdown()
+
+
+
 
 def script_defaults(settings):
     obs.obs_data_set_default_array(settings, "_filters", obs.obs_data_array_create())
@@ -15,14 +75,23 @@ def script_defaults(settings):
     obs.obs_data_set_default_int(settings, "_port", 4455)
     obs.obs_data_set_default_string(settings, "_color", "#6f6b6f")
 
+
+
+
 def script_load(settings):
     pass
 
+
+
+
 def callback(props, prop, *args, **kwargs):  # pass settings implicitly
+    print(SERVER_DATA.obsProperties == props)
     p = obs.obs_properties_get(props, "button")
     print(obs.obs_data_get_string(props, "_source"))
     print(obs.obs_data_get_string(props, "_filter"))
     return True
+
+
 
 
 def toggled(props, prop, *args, **kwargs):
@@ -31,14 +100,18 @@ def toggled(props, prop, *args, **kwargs):
     obs.obs_source_get_filter_by_name(obs.obs_properties_get)
 
 
+
+
 def script_description():
     return "Add or remove filters from the filter monitor."
+
+
 
 
 def script_properties():
 
     props = obs.obs_properties_create()
-    obs.obs_properties_add_list(props, "_filters", "Filters: ", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+    obs.obs_properties_add_editable_list(props, "_filters", "Filters: ", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
     obs.obs_properties_add_button(props, "remove_button", "Remove", remove_filter)
 
     obs.obs_properties_add_text(props, "_source", "Source: ", obs.OBS_TEXT_DEFAULT)
@@ -55,7 +128,11 @@ def script_properties():
 
     obs.obs_properties_add_button(props, "apply_button", "Apply Settings", create_monitor_html)
 
+    SERVER_DATA.obsProperties = props
+
     return props
+
+
 
 
 def save_config():
@@ -63,11 +140,23 @@ def save_config():
     with open(config_file, mode) as file:
         file.write(json.dumps(settings_as_dict()))
 
-def settings_as_dict() -> dict:
-    return { "hostAddress":hostAddress,
-            "port":port,
+
+
+
+def settings_as_dict(props) -> dict:
+
+
+    filters = obs.obs_data_get_array(props, "_filters")
+    hostAddress = obs.obs_data_get_string(props, "_address")
+    port = obs.obs_data_get_int(props, "_port")
+    obsPassword = obs.obs_data_get_string(props, "_pass")
+
+    return { "obsHost": f'{hostAddress}:{port}',
             "obsPassword":obsPassword,
             "filtersList": filters }
+
+
+
 
 def load_config() :
     if not os.path.exists(config_file): raise FileNotFoundError("Unable to locate config file: %s" % os.path.abspath(config_file))
@@ -79,6 +168,9 @@ def load_config() :
     port = config["port"]
     obsPassword = config["obsPassword"]
 
+
+
+
 def add_filter_callback(props, prop, *args, **kwargs):
     add_filter(
         props,
@@ -88,6 +180,9 @@ def add_filter_callback(props, prop, *args, **kwargs):
         onColor=obs.obs_data_get_string(props, "_color")
     )
 
+
+
+
 def add_filter(props, filterName: str, sourceName: str, displayName: str = None, onColor: str = None):
     new_filter = {"filterName": filterName, "sourceName": sourceName}
     if displayName != None: new_filter["displayName"] = displayName
@@ -96,10 +191,15 @@ def add_filter(props, filterName: str, sourceName: str, displayName: str = None,
     obs.obs_property_list_add_string(filters, str(new_filter))
 
 
-def remove_filter(data):
-    filters = obs.obs_properties_get(data, "_filters")
-    index = obs.obs_data_get_int(data, "_filters")
+
+
+def remove_filter(props, prop):
+    print(SERVER_DATA.obsProperties == props)
+    filters = obs.obs_properties_get(props, "_filters")
+    index = obs.obs_data_get_int(props, "_filters")
     obs.obs_property_list_item_remove(filters, index)
+
+
 
 
 def create_monitor_html(settings):
@@ -109,7 +209,7 @@ def create_monitor_html(settings):
         json_str = file.read()
 
 
-    filters : list = obs.obs_data_get_array(settings, "_filters")
+    filters = obs.obs_data_get_array(settings, "_filters")
 
     hostAddress : str = obs.obs_data_get_string(settings, "_address")
     port : str = obs.obs_data_get_int(settings, "_port")
@@ -122,3 +222,8 @@ def create_monitor_html(settings):
     mode : str = "w" if os.path.exists(html_file) else "x"
     with open(html_file, mode) as file:
         file.write(json_str)
+
+
+
+
+main()
