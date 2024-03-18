@@ -39,7 +39,7 @@
 	var obsPassword = "secret-password";
 
 	// The settings machine ip and port (Usually the ip is that of the obs machine)
-	var obsSettingsHost = "127.0.0.1:6005"
+	var obsSettingsHost = "localhost:6005"
 	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
@@ -53,43 +53,47 @@
 	
 	// initialize
 	async function init() {
-		await refreshSettings()
+		await refreshSettings();
 		attemptConnection();
 		generateLayout(filterslist);
 	}
 
 	// Requests settings from obs script monitorconfig.py
 	async function refreshSettings(){
-		var refreshButton = document.getElementById("refresh-button")
-		refreshButton.disabled = true
+		var refreshButton = document.getElementById("refresh-button");
+		refreshButton.disabled = true;
 
 		const refreshRequest = 'settings'; // Replace with your desired value
 		const url = `http://${obsSettingsHost}/?${refreshRequest}`;
 
+		console.log(url);
+
 		fetch(url)
-			.then(response => response.text())
-			.then(response => JSON.parse(response))
-			.then(settings => {
-				newFilters = settings.filters
-				var obsNewPass = settings.obsPassword
-				var obsNewHost = settings.obsHost
+			.then((response) => response.json())
+			.then((json) => {
+				console.log(json);
+				var newFilters = json.filterlist;
+				var obsNewPass = json.obsPassword;
+				var obsNewHost = json.obsHost;
 				if (obsNewHost != obsHost || obsNewPass != obsPassword){
-					obsHost = obsNewHost
-					obsPassword = obsNewPass
-					attemptConnection()
+					obsHost = obsNewHost;
+					obsPassword = obsNewPass;
+					attemptConnection();
 				}
 				if (newFilters != filterslist){
-					filterslist = newFilters
-					generateLayout(filterslist)
+					filterslist = newFilters;
+					generateLayout(filterslist);
+					if(connectionIsOpen) getInitialState();
 				}
+				console.log(`OBS Host: ${obsHost}\nOBS Password: ${obsPassword}\nFilters: ${filterlist}`);
 			})
 			.catch(error => {
-				var errorMessage = 'Unable to fetch settings: ' + error
+				var errorMessage = `Unable to fetch settings: ${error}`;
 				console.error(errorMessage, error);
-				toggleErrorDivVisibility(false, errorMessage)
+				toggleErrorDivVisibility(false, errorMessage);
 			});
 		
-		refreshButton.disabled = false
+		refreshButton.disabled = false;
 	}
 	
 	// Handle websocket connection stuff
@@ -237,7 +241,8 @@
 				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" src="" onclick="imageClicked(this);" /></div>`;
 			}
 		});
-		document.getElementById("filterlist").innerHTML = lines;
+		htmlButtons = document.getElementById("filterlist")
+		htmlButtons.innerHTML = lines;
 	}
 
 	function toggleErrorDivVisibility(hidden = True, message = "") {
@@ -286,7 +291,7 @@
 	</style>
 </head>
 <body>
-    <button id="refresh-button" onclick="refreshSettings()" style="float: right;">Refresh</button>
+    <button id="refresh-button" onclick="refreshSettings()" style="float: right">Refresh</button>
 
 	<div class="flex-container" id="filterlist"></div>
 	<div class="errorbox" id="errorbox"></div>

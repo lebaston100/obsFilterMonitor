@@ -2,25 +2,25 @@ import os
 import obspython as obs
 import json 
 import os.path
-import http.server
+from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
-import threading
 from threading import Thread
 
-PORT = 6005
-config_file : str = os.path.relpath(__file__) + os.path.sep + "config.json"
+
 
 class ServerData:
     def __init__(self) -> None:
         self.server : TCPServer = None
         self.obsProperties = None
+        self.obsData = None
     
     def shutdown(self):
         if self.server: self.server.shutdown()
 
-SERVER_DATA : ServerData = ServerData()
 
-class SettingsRequestHandler(http.server.SimpleHTTPRequestHandler):
+
+
+class SettingsRequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         print("Received request: " + self.path)
 
@@ -35,18 +35,20 @@ class SettingsRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Send a response back to the client
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        self.wfile.write(json.dumps(settings_as_dict(SERVER_DATA.obsProperties)).encode())
-        super().do_GET()
+        settings_data = json.dumps(settings_as_dict(SERVER_DATA.obsData))
+        print(settings_data)
+        self.wfile.write(settings_data.encode())
         print("Request handled.")
 
 
 
 
-def main():
-    print('Attempting to start settings server...')
-    server_thread = threading.Thread(name="Settings server", target=lambda: serve_settings(SERVER_DATA))
-    server_thread.start()
+SERVER_DATA : ServerData = ServerData()
+
+PORT = 6005
+config_file : str = os.path.relpath(__file__) + os.path.sep + "config.json"
 
 
 
@@ -57,6 +59,15 @@ def serve_settings(data : ServerData):
 
         print(f"Serving on port {PORT}")
         service.serve_forever()
+
+
+
+
+def script_load(settings):
+    SERVER_DATA.obsData = settings
+    print('Starting settings server...')
+    server_thread = Thread(name="Settings server", target=lambda: serve_settings(SERVER_DATA))
+    server_thread.start()
 
 
 
@@ -73,13 +84,7 @@ def script_defaults(settings):
     obs.obs_data_set_default_bool(settings, "_use_pass", False)
     obs.obs_data_set_default_string(settings, "_address", "127.0.0.1")
     obs.obs_data_set_default_int(settings, "_port", 4455)
-    obs.obs_data_set_default_string(settings, "_color", "#6f6b6f")
-
-
-
-
-def script_load(settings):
-    pass
+    obs.obs_data_set_default_int(settings, "_color", int("#32Cd32"))
 
 
 
@@ -112,7 +117,6 @@ def script_properties():
 
     props = obs.obs_properties_create()
     obs.obs_properties_add_editable_list(props, "_filters", "Filters: ", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
-    obs.obs_properties_add_button(props, "remove_button", "Remove", remove_filter)
 
     obs.obs_properties_add_text(props, "_source", "Source: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_text(props, "_filter", "Filter: ", obs.OBS_TEXT_DEFAULT)
@@ -123,10 +127,10 @@ def script_properties():
     obs.obs_properties_add_text(props, "_address", "Address: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_int(props, "_port", "Port: ", 0, 65535, 1)
 
-    obs.obs_properties_add_text(props, "_pass", "Password: ", obs.OBS_TEXT_PASSWORD)
+    obs.obs_properties_add_text(props, "_pass", "Password*: ", obs.OBS_TEXT_PASSWORD)
     obs.obs_properties_add_bool(props, "_use_pass", "Use Password")
 
-    obs.obs_properties_add_button(props, "apply_button", "Apply Settings", create_monitor_html)
+    #obs.obs_properties_add_button(props, "apply_button", "Apply Settings", create_monitor_html)
 
     SERVER_DATA.obsProperties = props
 
@@ -143,17 +147,33 @@ def save_config():
 
 
 
-def settings_as_dict(props) -> dict:
-
-
-    filters = obs.obs_data_get_array(props, "_filters")
-    hostAddress = obs.obs_data_get_string(props, "_address")
-    port = obs.obs_data_get_int(props, "_port")
-    obsPassword = obs.obs_data_get_string(props, "_pass")
+def settings_as_dict(settings) -> dict:
+    hostAddress = obs.obs_data_get_string(settings, "_address")
+    port = obs.obs_data_get_int(settings, "_port")
+    obsPassword = obs.obs_data_get_string(settings, "_pass")
 
     return { "obsHost": f'{hostAddress}:{port}',
             "obsPassword":obsPassword,
-            "filtersList": filters }
+            "filterlist": get_filters(settings) }
+
+
+
+
+def get_filters(settings):
+    swing_array = obs.obs_data_get_array(settings, "_filters")
+    array_size = obs.obs_data_array_count(swing_array)
+    filters : list[dict] = []
+    for i in range(array_size):
+        swing_item = obs.obs_data_array_item(swing_array, i)
+        filters.append(item_to_dict(swing_item))
+    return filters
+
+
+
+
+def item_to_dict(swing_array_item) -> dict:
+    obj = obs.obs_data_get_json(swing_array_item)
+    return json.loads(json.loads(obj)["value"])
 
 
 
@@ -163,7 +183,7 @@ def load_config() :
     with open(config_file, "r") as file:
         json_str : str = file.read()
     config : dict = json.loads(s=file.read())
-    filters = config["filtersList"]
+    filters = config["filterlist"]
     hostAddress = config["hostAddress"]
     port = config["port"]
     obsPassword = config["obsPassword"]
@@ -172,58 +192,35 @@ def load_config() :
 
 
 def add_filter_callback(props, prop, *args, **kwargs):
+    data = SERVER_DATA.obsData
     add_filter(
-        props,
-        filterName=obs.obs_data_get_string(props, "_filter"),
-        sourceName=obs.obs_data_get_string(props, "_source"),
-        displayName=obs.obs_data_get_string(props, "_name"),
-        onColor=obs.obs_data_get_string(props, "_color")
+        data,
+        filterName=obs.obs_data_get_string(data, "_filter"),
+        sourceName=obs.obs_data_get_string(data, "_source"),
+        displayName=obs.obs_data_get_string(data, "_name"),
+        onColor=f'#{hex(obs.obs_data_get_int(data, "_color"))[4:]}'
     )
 
 
 
 
-def add_filter(props, filterName: str, sourceName: str, displayName: str = None, onColor: str = None):
-    new_filter = {"filterName": filterName, "sourceName": sourceName}
-    if displayName != None: new_filter["displayName"] = displayName
-    if onColor != None: new_filter["onColor"] = onColor
-    filters = obs.obs_properties_get(props, "_filters")
-    obs.obs_property_list_add_string(filters, str(new_filter))
+def add_filter(data, filterName : str, sourceName : str, displayName : str = None, onColor : str = None):
+    swing_data = obs.obs_data_get_array(data, "_filters")
+    item_as_json = create_list_item_json(filterName, sourceName, displayName, onColor)
+    item = obs.obs_data_create_from_json(item_as_json)
+    print(item)
+    obs.obs_data_array_push_back(swing_data, item)
+    obs.obs_data_set_array(data, "_filters", swing_data)
 
 
 
 
-def remove_filter(props, prop):
-    print(SERVER_DATA.obsProperties == props)
-    filters = obs.obs_properties_get(props, "_filters")
-    index = obs.obs_data_get_int(props, "_filters")
-    obs.obs_property_list_item_remove(filters, index)
+def create_list_item_json(filterName : str, sourceName : str, displayName : str = None, onColor : str = None) -> str:
+    filter = '{\\\"filterName\\\": \\\"%s\\\", \\\"sourceName\\\": \\\"%s\\\"' % (filterName, sourceName)
+    if displayName != None: filter += f', \\\"displayName\\\": \\\"{displayName}\\\"'
+    if onColor != None: filter += f', \\\"onColor\\\": \\\"{onColor}\\\"'
+    filter += "}"
+    return '{"value":"%s","selected":false,"hidden":false}' % filter
 
 
 
-
-def create_monitor_html(settings):
-    if not os.path.exists(template_file): raise FileNotFoundError("Unable to locate monitor template file: %s" % template_file)
-    json_str : str
-    with open(template_file, "r") as file:
-        json_str = file.read()
-
-
-    filters = obs.obs_data_get_array(settings, "_filters")
-
-    hostAddress : str = obs.obs_data_get_string(settings, "_address")
-    port : str = obs.obs_data_get_int(settings, "_port")
-    obsPassword : str = obs.obs_data_get_string(settings, "_pass")
-
-    json_str.replace("[{\"filterName\": \"filter1\", \"sourceName\": \"source1\", \"displayName\": \"Filter\", \"onColor\": \"hexValue\"}]", json.dumps(filters))
-    json_str.replace("127.0.0.1:4455", json.dumps(f"{hostAddress}:{port}"))
-    json_str.replace("secret-password", json.dumps(f"{obsPassword}"))
-    
-    mode : str = "w" if os.path.exists(html_file) else "x"
-    with open(html_file, mode) as file:
-        file.write(json_str)
-
-
-
-
-main()
