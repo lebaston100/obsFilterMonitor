@@ -9,7 +9,7 @@
 	<script>
 	// you can set which filters you want to monitor in here, please follow this style (there is no , after the last element in the list)
 	// "onColor" and "displayName" is optional!
-	const filterslist = [{"filterName": "Filter 1", "sourceName": "Desktop-Audio"},
+	var filterslist = [{"filterName": "Filter 1", "sourceName": "Desktop-Audio"},
 						{"filterName": "Filter 2", "sourceName": "Mic/Aux", "displayName": "Comp 1"},
 						{"filterName": "Pitch", "sourceName": "Mic/Aux", "onColor": "#00FFFF"},
 						{"filterName": "Chroma Key", "sourceName": "Webcam", "displayName": "Keyer", "onColor": "#00FFFF"},
@@ -33,10 +33,13 @@
 	const fallbackOnColor = "#32Cd32";
 
 	// The obs machine ip and port
-	const obsHost = "127.0.0.1:4455";
+	var obsHost = "127.0.0.1:4455";
 
 	// The obs-websocket password (if set)
-	const obsPassword = "secret-password";
+	var obsPassword = "secret-password";
+
+	// The settings machine ip and port (Usually the ip is that of the obs machine)
+	var obsSettingsHost = "localhost:6005"
 	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
@@ -49,9 +52,48 @@
 	const obs = new OBSWebSocket();
 	
 	// initialize
-	function init() {
+	async function init() {
+		await refreshSettings();
 		attemptConnection();
 		generateLayout(filterslist);
+	}
+
+	// Requests settings from obs script monitorconfig.py
+	async function refreshSettings(){
+		var refreshButton = document.getElementById("refresh-button");
+		refreshButton.disabled = true;
+
+		const refreshRequest = 'settings'; // Replace with your desired value
+		const url = `http://${obsSettingsHost}/?${refreshRequest}`;
+
+		console.log(url);
+
+		fetch(url)
+			.then((response) => response.json())
+			.then((json) => {
+				console.log(json);
+				var newFilters = json.filterlist;
+				var obsNewPass = json.obsPassword;
+				var obsNewHost = json.obsHost;
+				if (obsNewHost != obsHost || obsNewPass != obsPassword){
+					obsHost = obsNewHost;
+					obsPassword = obsNewPass;
+					attemptConnection();
+				}
+				if (newFilters != filterslist){
+					filterslist = newFilters;
+					generateLayout(filterslist);
+					if(connectionIsOpen) getInitialState();
+				}
+				console.log(`OBS Host: ${obsHost}\nOBS Password: ${obsPassword}\nFilters: ${filterlist}`);
+			})
+			.catch(error => {
+				var errorMessage = `Unable to fetch settings: ${error}`;
+				console.error(errorMessage, error);
+				toggleErrorDivVisibility(false, errorMessage);
+			});
+		
+		refreshButton.disabled = false;
 	}
 	
 	// Handle websocket connection stuff
@@ -199,7 +241,8 @@
 				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" src="" onclick="imageClicked(this);" /></div>`;
 			}
 		});
-		document.getElementById("filterlist").innerHTML = lines;
+		htmlButtons = document.getElementById("filterlist")
+		htmlButtons.innerHTML = lines;
 	}
 
 	function toggleErrorDivVisibility(hidden = True, message = "") {
@@ -248,6 +291,8 @@
 	</style>
 </head>
 <body>
+    <button id="refresh-button" onclick="refreshSettings()" style="float: right">Refresh</button>
+
 	<div class="flex-container" id="filterlist"></div>
 	<div class="errorbox" id="errorbox"></div>
 </body>
