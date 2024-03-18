@@ -6,7 +6,7 @@ from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
 from threading import Thread
 
-
+# TODO : Implements saving and loading settings to a json file (backup settings)
 
 class GlobalData:
     def __init__(self) -> None:
@@ -28,7 +28,6 @@ class SettingsRequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         GLOBAL_DATA.debug_message("Received request: " + self.path)
 
-        # Extract any query parameters (e.g., 'imsi') from the URL
         query_param = self.path
         
         if query_param != '/?settings':
@@ -128,7 +127,7 @@ def script_properties():
     obs.obs_properties_add_text(props, "_pass", "Password: ", obs.OBS_TEXT_PASSWORD)
     obs.obs_properties_add_button(props, "_debug", "Debug Disabled", on_debug_toggled)
 
-    #obs.obs_properties_add_button(props, "apply_button", "Apply Settings", create_monitor_html)
+    #obs.obs_properties_add_button(props, "save_button", "Save Settings", save_config)
 
     GLOBAL_DATA.obsProperties = props
 
@@ -198,6 +197,7 @@ def add_filter_callback(props, prop, *args, **kwargs):
         displayName=obs.obs_data_get_string(data, "_name"),
         onColor=f'#{hex(obs.obs_data_get_int(data, "_color"))[4:]}'
     )
+    return True
 
 
 
