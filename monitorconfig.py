@@ -6,30 +6,33 @@ from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
 from threading import Thread
 
+# TODO : Implements saving and loading settings to a json file (backup settings)
 
-
-class ServerData:
+class GlobalData:
     def __init__(self) -> None:
-        self.server : TCPServer = None
+        self.httpService : TCPServer = None
         self.obsProperties = None
         self.obsData = None
+        self.debug : bool = False
     
-    def shutdown(self):
-        if self.server: self.server.shutdown()
+    def debug_message(self, msg : str):
+        if self.debug: print(msg)
+
+    def shutdown_server(self):
+        if self.httpService: self.httpService.shutdown()
 
 
 
 
 class SettingsRequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
-        print("Received request: " + self.path)
+        GLOBAL_DATA.debug_message("Received request: " + self.path)
 
-        # Extract any query parameters (e.g., 'imsi') from the URL
         query_param = self.path
         
         if query_param != '/?settings':
             self.send_error(404, "Invalid Request.", "Monitor config only supports settings requests.")
-            print("Request rejected.")
+            GLOBAL_DATA.debug_message("Request rejected.")
             return
 
         # Send a response back to the client
@@ -37,43 +40,45 @@ class SettingsRequestHandler(SimpleHTTPRequestHandler):
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        settings_data = json.dumps(settings_as_dict(SERVER_DATA.obsData))
-        print(settings_data)
+        settings_data = json.dumps(settings_as_dict(GLOBAL_DATA.obsData))
+        GLOBAL_DATA.debug_message(settings_data)
         self.wfile.write(settings_data.encode())
-        print("Request handled.")
+        GLOBAL_DATA.debug_message("Request handled.")
+    
+    def log_message(self, format: str, *args) -> None:
+        if GLOBAL_DATA.debug: super().log_message(format, *args)
 
 
 
 
-SERVER_DATA : ServerData = ServerData()
+GLOBAL_DATA : GlobalData = GlobalData()
 
 PORT = 6005
-config_file : str = os.path.relpath(__file__) + os.path.sep + "config.json"
+CONFIG_FILE : str = os.path.relpath(__file__) + os.path.sep + "config.json"
 
 
 
 
-def serve_settings(data : ServerData):
+def serve_settings():
     with TCPServer(("", PORT), SettingsRequestHandler) as service:
-        data.server = service
-
-        print(f"Serving on port {PORT}")
+        GLOBAL_DATA.httpService = service
+        GLOBAL_DATA.debug_message(f"Serving on port {PORT}")
         service.serve_forever()
 
 
 
 
 def script_load(settings):
-    SERVER_DATA.obsData = settings
-    print('Starting settings server...')
-    server_thread = Thread(name="Settings server", target=lambda: serve_settings(SERVER_DATA))
+    GLOBAL_DATA.obsData = settings
+    GLOBAL_DATA.debug_message('Starting settings server...')
+    server_thread = Thread(name="HTTP server", target=serve_settings)
     server_thread.start()
 
 
 
 
 def script_unload():
-    SERVER_DATA.shutdown()
+    GLOBAL_DATA.shutdown_server()
 
 
 
@@ -84,25 +89,7 @@ def script_defaults(settings):
     obs.obs_data_set_default_bool(settings, "_use_pass", False)
     obs.obs_data_set_default_string(settings, "_address", "127.0.0.1")
     obs.obs_data_set_default_int(settings, "_port", 4455)
-    obs.obs_data_set_default_int(settings, "_color", int("#32Cd32"))
-
-
-
-
-def callback(props, prop, *args, **kwargs):  # pass settings implicitly
-    print(SERVER_DATA.obsProperties == props)
-    p = obs.obs_properties_get(props, "button")
-    print(obs.obs_data_get_string(props, "_source"))
-    print(obs.obs_data_get_string(props, "_filter"))
-    return True
-
-
-
-
-def toggled(props, prop, *args, **kwargs):
-    print(obs.obs_properties_get(props, "_bool"))
-    obs.obs_properties_get(props, "_bool")
-    obs.obs_source_get_filter_by_name(obs.obs_properties_get)
+    obs.obs_data_set_default_int(settings, "_color", int("32Cd32", 16))
 
 
 
@@ -110,6 +97,16 @@ def toggled(props, prop, *args, **kwargs):
 def script_description():
     return "Add or remove filters from the filter monitor."
 
+
+
+def on_debug_toggled(props, prop, *args, **kwargs):
+    print(GLOBAL_DATA.debug)
+    GLOBAL_DATA.debug = not GLOBAL_DATA.debug
+    print(GLOBAL_DATA.debug)
+    debug_btn = obs.obs_properties_get(props, "_debug")
+    obs.obs_property_set_description(debug_btn, f'Debug {"Enabled" if GLOBAL_DATA.debug else "Disabled"}')
+    print("Done")
+    return True
 
 
 
@@ -122,17 +119,17 @@ def script_properties():
     obs.obs_properties_add_text(props, "_filter", "Filter: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_text(props, "_name", "Display Name: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_color(props, "_color", "Active Color: ")
-    obs.obs_properties_add_button(props, "add_button", "Add", add_filter_callback)
+    obs.obs_properties_add_button(props, "add_button", "Add Filter", add_filter_callback)
 
     obs.obs_properties_add_text(props, "_address", "Address: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_int(props, "_port", "Port: ", 0, 65535, 1)
 
-    obs.obs_properties_add_text(props, "_pass", "Password*: ", obs.OBS_TEXT_PASSWORD)
-    obs.obs_properties_add_bool(props, "_use_pass", "Use Password")
+    obs.obs_properties_add_text(props, "_pass", "Password: ", obs.OBS_TEXT_PASSWORD)
+    obs.obs_properties_add_button(props, "_debug", "Debug Disabled", on_debug_toggled)
 
-    #obs.obs_properties_add_button(props, "apply_button", "Apply Settings", create_monitor_html)
+    #obs.obs_properties_add_button(props, "save_button", "Save Settings", save_config)
 
-    SERVER_DATA.obsProperties = props
+    GLOBAL_DATA.obsProperties = props
 
     return props
 
@@ -140,8 +137,8 @@ def script_properties():
 
 
 def save_config():
-    mode : str = "w" if os.path.exists(html_file) else "x"
-    with open(config_file, mode) as file:
+    mode : str = "w" if os.path.exists(CONFIG_FILE) else "x"
+    with open(CONFIG_FILE, mode) as file:
         file.write(json.dumps(settings_as_dict()))
 
 
@@ -177,10 +174,10 @@ def item_to_dict(swing_array_item) -> dict:
 
 
 
-
+## TODO : remove or integrate
 def load_config() :
-    if not os.path.exists(config_file): raise FileNotFoundError("Unable to locate config file: %s" % os.path.abspath(config_file))
-    with open(config_file, "r") as file:
+    if not os.path.exists(CONFIG_FILE): raise FileNotFoundError("Unable to locate config file: %s" % os.path.abspath(CONFIG_FILE))
+    with open(CONFIG_FILE, "r") as file:
         json_str : str = file.read()
     config : dict = json.loads(s=file.read())
     filters = config["filterlist"]
@@ -192,7 +189,7 @@ def load_config() :
 
 
 def add_filter_callback(props, prop, *args, **kwargs):
-    data = SERVER_DATA.obsData
+    data = GLOBAL_DATA.obsData
     add_filter(
         data,
         filterName=obs.obs_data_get_string(data, "_filter"),
@@ -200,6 +197,7 @@ def add_filter_callback(props, prop, *args, **kwargs):
         displayName=obs.obs_data_get_string(data, "_name"),
         onColor=f'#{hex(obs.obs_data_get_int(data, "_color"))[4:]}'
     )
+    return True
 
 
 
@@ -208,7 +206,7 @@ def add_filter(data, filterName : str, sourceName : str, displayName : str = Non
     swing_data = obs.obs_data_get_array(data, "_filters")
     item_as_json = create_list_item_json(filterName, sourceName, displayName, onColor)
     item = obs.obs_data_create_from_json(item_as_json)
-    print(item)
+    GLOBAL_DATA.debug_message(item)
     obs.obs_data_array_push_back(swing_data, item)
     obs.obs_data_set_array(data, "_filters", swing_data)
 
@@ -221,6 +219,3 @@ def create_list_item_json(filterName : str, sourceName : str, displayName : str 
     if onColor != None: filter += f', \\\"onColor\\\": \\\"{onColor}\\\"'
     filter += "}"
     return '{"value":"%s","selected":false,"hidden":false}' % filter
-
-
-
