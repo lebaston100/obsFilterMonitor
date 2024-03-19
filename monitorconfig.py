@@ -35,7 +35,7 @@ class GlobalData:
 
 
     def start_server_asynch(self, retry_freq : float = 0.5, tiemout : float = 10.0):
-        server_thread : Thread = Thread(name="HTTP Server", target=lambda: self.start_server(retry_freq, tiemout), daemon=False)
+        server_thread : Thread = Thread(name="HTTP Server", target=lambda: self.start_server(retry_freq, tiemout), daemon=True)
         server_thread.start()
 
     
@@ -67,7 +67,7 @@ class GlobalData:
         
     def shutdown_server_async(self):
         # TODO: Results in deadlock; No idea how fix.
-        watcher_thread : Thread = Thread(name="Server Shutdown Watcher", target=self.shutdown_server, daemon=False)
+        watcher_thread : Thread = Thread(name="Server Shutdown Watcher", target=self.shutdown_server, daemon=True)
         watcher_thread.start()
 
 
