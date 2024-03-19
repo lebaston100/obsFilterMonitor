@@ -20,7 +20,7 @@ class ReusableServer(TCPServer):
 
 class ScriptContext:
     def __init__(self) -> None:
-        self.http_service : TCPServer = None
+        self.http_service : ReusableServer = None
         self.server_running : bool = False
         self.obs_properties = None
         self.obs_data = None
@@ -134,12 +134,14 @@ def script_unload():
 
 
 def script_defaults(settings):
-    obs.obs_data_set_default_array(settings, "_filters", obs.obs_data_array_create())
+    swing_array = obs.obs_data_array_create()
+    obs.obs_data_set_default_array(settings, "_filters", swing_array)
     obs.obs_data_set_default_string(settings, "_pass", "secret-password")
     obs.obs_data_set_default_bool(settings, "_use_pass", False)
     obs.obs_data_set_default_string(settings, "_address", "127.0.0.1")
     obs.obs_data_set_default_int(settings, "_port", 4455)
     obs.obs_data_set_default_int(settings, "_color", int("ff32Cd32", 16))
+    obs.obs_data_array_release(swing_array)
 
 
 
@@ -168,7 +170,7 @@ def script_properties():
     obs.obs_properties_add_text(props, "_filter", "Filter: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_text(props, "_name", "Display Name: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_color(props, "_color", "Active Color: ")
-    obs.obs_properties_add_button(props, "add_button", "Add Filter", add_filter_callback)
+    obs.obs_properties_add_button(props, "add_button", "Add Filter", on_add_filter_pressed)
 
     obs.obs_properties_add_text(props, "_address", "Address: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_int(props, "_port", "Port: ", 0, 65535, 1)
@@ -181,14 +183,6 @@ def script_properties():
     SCRIPT_CONTEXT.obs_properties = props
 
     return props
-
-
-
-
-def save_config():
-    mode : str = "w" if os.path.exists(CONFIG_FILE) else "x"
-    with open(CONFIG_FILE, mode) as file:
-        file.write(json.dumps(settings_as_dict()))
 
 
 
@@ -211,15 +205,25 @@ def get_filters(settings):
     filters : list[dict] = []
     for i in range(array_size):
         swing_item = obs.obs_data_array_item(swing_array, i)
-        filters.append(item_to_dict(swing_item))
+        filters.append(swing_item_to_dict(swing_item))
+        obs.obs_data_release(swing_item)
+    obs.obs_data_array_release(swing_array)
     return filters
 
 
 
 
-def item_to_dict(swing_array_item) -> dict:
+def swing_item_to_dict(swing_array_item) -> dict:
     obj = obs.obs_data_get_json(swing_array_item)
     return json.loads(json.loads(obj)["value"])
+
+
+
+
+def save_config():
+    mode : str = "w" if os.path.exists(CONFIG_FILE) else "x"
+    with open(CONFIG_FILE, mode) as file:
+        file.write(json.dumps(settings_as_dict()))
 
 
 
@@ -237,21 +241,21 @@ def load_config() :
 
 
 
-def add_filter_callback(props, prop, *args, **kwargs):
+def on_add_filter_pressed(props, prop, *args, **kwargs):
     data = SCRIPT_CONTEXT.obs_data
     add_filter(
         data,
         filterName=obs.obs_data_get_string(data, "_filter"),
         sourceName=obs.obs_data_get_string(data, "_source"),
         displayName=obs.obs_data_get_string(data, "_name"),
-        onColor=int_to_color_hex(obs.obs_data_get_int(data, "_color"))
+        onColor=int_to_rgb_hex(obs.obs_data_get_int(data, "_color"))
     )
     return True
 
 
 
 
-def int_to_color_hex(num : int) -> str:
+def int_to_rgb_hex(num : int) -> str:
     hex_str = hex(num) # 0xAABBGGRR (The obs_data_get_int color format)
     
     r = hex_str[8:10]
@@ -263,12 +267,14 @@ def int_to_color_hex(num : int) -> str:
 
 
 def add_filter(data, filterName : str, sourceName : str, displayName : str = None, onColor : str = None):
-    swing_data = obs.obs_data_get_array(data, "_filters")
+    swing_array = obs.obs_data_get_array(data, "_filters")
     item_as_json = create_list_item_json(filterName, sourceName, displayName, onColor)
-    item = obs.obs_data_create_from_json(item_as_json)
-    SCRIPT_CONTEXT.debug_message(item)
-    obs.obs_data_array_push_back(swing_data, item)
-    obs.obs_data_set_array(data, "_filters", swing_data)
+    swing_item = obs.obs_data_create_from_json(item_as_json)
+    SCRIPT_CONTEXT.debug_message(swing_item)
+    obs.obs_data_array_push_back(swing_array, swing_item)
+    obs.obs_data_set_array(data, "_filters", swing_array)
+    obs.obs_data_release(swing_item)
+    obs.obs_data_array_release(swing_array)
 
 
 
