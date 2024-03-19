@@ -7,7 +7,16 @@ from socketserver import TCPServer
 from threading import Thread
 import time
 
-# TODO : Implements saving and loading settings to a json file (backup settings)
+# TODO : Implement saving and loading settings to a json file (backup settings)
+# TODO : Implement retry/cancel craete server (UI Button and functions)
+
+
+class ReusableServer(TCPServer):
+    allow_reuse_address = True
+    allow_reuse_port = True
+
+
+
 
 class GlobalData:
     def __init__(self) -> None:
@@ -15,14 +24,14 @@ class GlobalData:
         self.server_running : bool = False
         self.obs_properties = None
         self.obs_data = None
-        self.debug : bool = True
+        self.debug : bool = False
         self.shutdown_requested : bool = False
 
 
     def serve_settings(self):
         try:
             self.server_running = True
-            with TCPServer(("", PORT), SettingsRequestHandler) as service:
+            with ReusableServer(("", PORT), SettingsRequestHandler) as service:
                 self.http_service = service
                 self.debug_message(f"Serving on port {PORT}")
                 service.serve_forever(0.5)
@@ -34,12 +43,12 @@ class GlobalData:
                 self.http_service = None
 
 
-    def start_server_asynch(self, retry_freq : float = 0.5, tiemout : float = 10.0):
+    def start_server_asynch(self, retry_freq : float = None, tiemout : float = None):
         server_thread : Thread = Thread(name="HTTP Server", target=lambda: self.start_server(retry_freq, tiemout), daemon=True)
         server_thread.start()
 
     
-    def start_server(self, retry_freq : float = 0.5, tiemout : float = 10.0):
+    def start_server(self, retry_freq : float = None, tiemout : float = None):
         self.shutdown_requested = False
         start_time : float = time.process_time()
         while tiemout == None or (time.process_time() - start_time) < tiemout:
@@ -66,7 +75,6 @@ class GlobalData:
         self.obs_data = None
         
     def shutdown_server_async(self):
-        # TODO: Results in deadlock; No idea how fix.
         watcher_thread : Thread = Thread(name="Server Shutdown Watcher", target=self.shutdown_server, daemon=True)
         watcher_thread.start()
 
@@ -102,7 +110,8 @@ class SettingsRequestHandler(SimpleHTTPRequestHandler):
 
 
 GLOBAL_DATA : GlobalData = GlobalData()
-RETRY_FREQUENCY : float = 0.5
+DEFAULT_RETRY_FREQUENCY : float = 0.5
+DEFAULT_RETRY_DURATION : float = 10.0
 PORT = 6005
 CONFIG_FILE : str = os.path.relpath(__file__) + os.path.sep + "config.json"
 
@@ -112,7 +121,7 @@ CONFIG_FILE : str = os.path.relpath(__file__) + os.path.sep + "config.json"
 def script_load(settings):
     script_unload()
     GLOBAL_DATA.obs_data = settings
-    GLOBAL_DATA.start_server_asynch(RETRY_FREQUENCY)
+    GLOBAL_DATA.start_server_asynch(DEFAULT_RETRY_FREQUENCY, DEFAULT_RETRY_DURATION)
 
 
 
