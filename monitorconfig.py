@@ -18,9 +18,9 @@ class ReusableServer(TCPServer):
 
 
 
-class GlobalData:
+class ScriptContext:
     def __init__(self) -> None:
-        self.http_service : TCPServer = None
+        self.http_service : ReusableServer = None
         self.server_running : bool = False
         self.obs_properties = None
         self.obs_data = None
@@ -43,12 +43,12 @@ class GlobalData:
                 self.http_service = None
 
 
-    def start_server_asynch(self, retry_freq : float = None, tiemout : float = None):
-        server_thread : Thread = Thread(name="HTTP Server", target=lambda: self.start_server(retry_freq, tiemout), daemon=True)
+    def start_server_asynch(self, retry_delay : float = None, tiemout : float = None):
+        server_thread : Thread = Thread(name="HTTP Server", target=lambda: self.start_server(retry_delay, tiemout), daemon=True)
         server_thread.start()
 
     
-    def start_server(self, retry_freq : float = None, tiemout : float = None):
+    def start_server(self, retry_delay : float = None, tiemout : float = None):
         self.shutdown_requested = False
         start_time : float = time.process_time()
         while tiemout == None or (time.process_time() - start_time) < tiemout:
@@ -58,8 +58,8 @@ class GlobalData:
                 self.serve_settings()
             except BaseException as error:
                 self.debug_message(f'Unable to start server: {error}')
-                if self.shutdown_requested or retry_freq == None: break
-                time.sleep(retry_freq)
+                if self.shutdown_requested or retry_delay == None: break
+                time.sleep(retry_delay)
             
 
     def debug_message(self, msg : str):
@@ -83,7 +83,7 @@ class GlobalData:
 
 class SettingsRequestHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
-        GLOBAL_DATA.debug_message("Received request: " + self.path)
+        SCRIPT_CONTEXT.debug_message("Received request: " + self.path)
 
         query_param = self.path
 
@@ -91,25 +91,25 @@ class SettingsRequestHandler(SimpleHTTPRequestHandler):
             self.handle_settings_request()
         else:
             self.send_error(404, "Invalid Request.", "Monitor config only supports settings requests.")
-            GLOBAL_DATA.debug_message("Request rejected.")
+            SCRIPT_CONTEXT.debug_message("Request rejected.")
 
     def handle_settings_request(self):
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        settings_data = json.dumps(settings_as_dict(GLOBAL_DATA.obs_data))
-        GLOBAL_DATA.debug_message(settings_data)
+        settings_data = json.dumps(settings_as_dict(SCRIPT_CONTEXT.obs_data))
+        SCRIPT_CONTEXT.debug_message(settings_data)
         self.wfile.write(settings_data.encode())
-        GLOBAL_DATA.debug_message("Request handled.")
+        SCRIPT_CONTEXT.debug_message("Request handled.")
     
     def log_message(self, format: str, *args) -> None:
-        if GLOBAL_DATA.debug: super().log_message(format, *args)
+        if SCRIPT_CONTEXT.debug: super().log_message(format, *args)
 
 
 
 
-GLOBAL_DATA : GlobalData = GlobalData()
+SCRIPT_CONTEXT : ScriptContext = ScriptContext()
 DEFAULT_RETRY_FREQUENCY : float = 0.5
 DEFAULT_RETRY_DURATION : float = 10.0
 PORT = 6005
@@ -120,26 +120,28 @@ CONFIG_FILE : str = os.path.relpath(__file__) + os.path.sep + "config.json"
 
 def script_load(settings):
     script_unload()
-    GLOBAL_DATA.obs_data = settings
-    GLOBAL_DATA.start_server_asynch(DEFAULT_RETRY_FREQUENCY, DEFAULT_RETRY_DURATION)
+    SCRIPT_CONTEXT.obs_data = settings
+    SCRIPT_CONTEXT.start_server_asynch(DEFAULT_RETRY_FREQUENCY, DEFAULT_RETRY_DURATION)
 
 
 
 
 def script_unload():
-    GLOBAL_DATA.shutdown_server_async()
-    GLOBAL_DATA.dereference_data()
+    SCRIPT_CONTEXT.shutdown_server_async()
+    SCRIPT_CONTEXT.dereference_data()
 
 
 
 
 def script_defaults(settings):
-    obs.obs_data_set_default_array(settings, "_filters", obs.obs_data_array_create())
+    swing_array = obs.obs_data_array_create()
+    obs.obs_data_set_default_array(settings, "_filters", swing_array)
     obs.obs_data_set_default_string(settings, "_pass", "secret-password")
     obs.obs_data_set_default_bool(settings, "_use_pass", False)
     obs.obs_data_set_default_string(settings, "_address", "127.0.0.1")
     obs.obs_data_set_default_int(settings, "_port", 4455)
     obs.obs_data_set_default_int(settings, "_color", int("ff32Cd32", 16))
+    obs.obs_data_array_release(swing_array)
 
 
 
@@ -151,9 +153,9 @@ def script_description():
 
 
 def on_debug_toggled(props, prop, *args, **kwargs):
-    GLOBAL_DATA.debug = not GLOBAL_DATA.debug
+    SCRIPT_CONTEXT.debug = not SCRIPT_CONTEXT.debug
     debug_btn = obs.obs_properties_get(props, "_debug")
-    obs.obs_property_set_description(debug_btn, f'Debug {"Enabled" if GLOBAL_DATA.debug else "Disabled"}')
+    obs.obs_property_set_description(debug_btn, f'Debug {"Enabled" if SCRIPT_CONTEXT.debug else "Disabled"}')
     return True
 
 
@@ -168,7 +170,7 @@ def script_properties():
     obs.obs_properties_add_text(props, "_filter", "Filter: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_text(props, "_name", "Display Name: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_color(props, "_color", "Active Color: ")
-    obs.obs_properties_add_button(props, "add_button", "Add Filter", add_filter_callback)
+    obs.obs_properties_add_button(props, "add_button", "Add Filter", on_add_filter_pressed)
 
     obs.obs_properties_add_text(props, "_address", "Address: ", obs.OBS_TEXT_DEFAULT)
     obs.obs_properties_add_int(props, "_port", "Port: ", 0, 65535, 1)
@@ -178,17 +180,9 @@ def script_properties():
 
     #obs.obs_properties_add_button(props, "save_button", "Save Settings", save_config)
 
-    GLOBAL_DATA.obs_properties = props
+    SCRIPT_CONTEXT.obs_properties = props
 
     return props
-
-
-
-
-def save_config():
-    mode : str = "w" if os.path.exists(CONFIG_FILE) else "x"
-    with open(CONFIG_FILE, mode) as file:
-        file.write(json.dumps(settings_as_dict()))
 
 
 
@@ -211,15 +205,25 @@ def get_filters(settings):
     filters : list[dict] = []
     for i in range(array_size):
         swing_item = obs.obs_data_array_item(swing_array, i)
-        filters.append(item_to_dict(swing_item))
+        filters.append(swing_item_to_dict(swing_item))
+        obs.obs_data_release(swing_item)
+    obs.obs_data_array_release(swing_array)
     return filters
 
 
 
 
-def item_to_dict(swing_array_item) -> dict:
+def swing_item_to_dict(swing_array_item) -> dict:
     obj = obs.obs_data_get_json(swing_array_item)
     return json.loads(json.loads(obj)["value"])
+
+
+
+
+def save_config():
+    mode : str = "w" if os.path.exists(CONFIG_FILE) else "x"
+    with open(CONFIG_FILE, mode) as file:
+        file.write(json.dumps(settings_as_dict()))
 
 
 
@@ -237,27 +241,40 @@ def load_config() :
 
 
 
-def add_filter_callback(props, prop, *args, **kwargs):
-    data = GLOBAL_DATA.obs_data
+def on_add_filter_pressed(props, prop, *args, **kwargs):
+    data = SCRIPT_CONTEXT.obs_data
     add_filter(
         data,
         filterName=obs.obs_data_get_string(data, "_filter"),
         sourceName=obs.obs_data_get_string(data, "_source"),
         displayName=obs.obs_data_get_string(data, "_name"),
-        onColor=f'#{hex(obs.obs_data_get_int(data, "_color"))[4:]}'
+        onColor=int_to_rgb_hex(obs.obs_data_get_int(data, "_color"))
     )
     return True
 
 
 
 
+def int_to_rgb_hex(num : int) -> str:
+    hex_str = hex(num) # 0xAABBGGRR (The obs_data_get_int color format)
+    
+    r = hex_str[8:10]
+    g = hex_str[6:8]
+    b = hex_str[4:6]
+    
+    return "".join(('#', r, g, b))
+
+
+
 def add_filter(data, filterName : str, sourceName : str, displayName : str = None, onColor : str = None):
-    swing_data = obs.obs_data_get_array(data, "_filters")
+    swing_array = obs.obs_data_get_array(data, "_filters")
     item_as_json = create_list_item_json(filterName, sourceName, displayName, onColor)
-    item = obs.obs_data_create_from_json(item_as_json)
-    GLOBAL_DATA.debug_message(item)
-    obs.obs_data_array_push_back(swing_data, item)
-    obs.obs_data_set_array(data, "_filters", swing_data)
+    swing_item = obs.obs_data_create_from_json(item_as_json)
+    SCRIPT_CONTEXT.debug_message(swing_item)
+    obs.obs_data_array_push_back(swing_array, swing_item)
+    obs.obs_data_set_array(data, "_filters", swing_array)
+    obs.obs_data_release(swing_item)
+    obs.obs_data_array_release(swing_array)
 
 
 

@@ -38,8 +38,8 @@
 	// The obs-websocket password (if set)
 	var obsPassword = "secret-password";
 
-	// The settings machine ip and port (Usually the ip is that of the obs machine)
-	var obsSettingsHost = "localhost:6005"
+	// The settings server ip and port (Usually the ip is that of the obs machine)
+	var obsSettingsHost = "127.0.0.1:6005"
 	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
@@ -58,12 +58,9 @@
 		generateLayout(filterslist);
 	}
 
-	// Requests settings from obs script monitorconfig.py
+	// Requests settings from the monitorconfig.py obs script
 	async function refreshSettings(){
-		var refreshButton = document.getElementById("refresh-button");
-		refreshButton.disabled = true;
-
-		const refreshRequest = 'settings'; // Replace with your desired value
+		const refreshRequest = 'settings';
 		const url = `http://${obsSettingsHost}/?${refreshRequest}`;
 
 		console.log(url);
@@ -92,8 +89,6 @@
 				console.error(errorMessage, error);
 				toggleErrorDivVisibility(false, errorMessage);
 			});
-		
-		refreshButton.disabled = false;
 	}
 	
 	// Handle websocket connection stuff
@@ -291,8 +286,6 @@
 	</style>
 </head>
 <body>
-    <button id="refresh-button" onclick="refreshSettings()" style="float: right">Refresh</button>
-
 	<div class="flex-container" id="filterlist"></div>
 	<div class="errorbox" id="errorbox"></div>
 </body>
