@@ -171,7 +171,7 @@ def script_defaults(settings):
 
 
 def script_description():
-    return "Add and remove filters from the OBS Filter Monitor."
+    return "<h1>OBS Filter Monitor Config</h1>\nAdd and remove filters from OBS Filter Monitor on the fly."
 
 
 
@@ -200,9 +200,9 @@ def script_properties():
 
     # Import Layout
     import_group = obs.obs_properties_create()
-    obs.obs_properties_add_path(import_group, "_import_path", "Import Path", obs.OBS_PATH_FILE, "*.json", SCRIPT_PATH)
+    obs.obs_properties_add_path(import_group, "_import_path", "Import Path: ", obs.OBS_PATH_FILE, "*.json", SCRIPT_PATH)
     
-    import_options = obs.obs_properties_add_list(import_group, "_import_method", "Import method", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+    import_options = obs.obs_properties_add_list(import_group, "_import_method", "Import method: ", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
     obs.obs_property_list_add_string(import_options, 'Add Filters', "_import_add_filters")
     obs.obs_property_list_add_string(import_options, 'Set Filters', "_import_set_filters")
     obs.obs_property_list_add_string(import_options, 'Set Websocket', "_import_set_websocket")
@@ -213,7 +213,7 @@ def script_properties():
     
     # Export Current Layout
     export_settings = obs.obs_properties_create()
-    obs.obs_properties_add_path(export_settings, "_export_path", "Export Path:", obs.OBS_PATH_FILE_SAVE, "*.json", SCRIPT_PATH + os.path.sep + "config.json")
+    obs.obs_properties_add_path(export_settings, "_export_path", "Export Path: ", obs.OBS_PATH_FILE_SAVE, "*.json", SCRIPT_PATH + os.path.sep + "config.json")
     obs.obs_properties_add_button(export_settings, "_export_btn", 'Export', on_export_config_pressed)
     obs.obs_properties_add_group(props, "_export", "Export Current Layout", obs.OBS_GROUP_NORMAL, export_settings)
 
