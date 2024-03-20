@@ -213,7 +213,7 @@ def script_properties():
     
     # Export Current Layout
     export_settings = obs.obs_properties_create()
-    obs.obs_properties_add_path(export_settings, "_export_path", "Export Path: ", obs.OBS_PATH_FILE_SAVE, "*.json", SCRIPT_PATH + os.path.sep + "config.json")
+    obs.obs_properties_add_path(export_settings, "_export_path", "Export Path: ", obs.OBS_PATH_FILE_SAVE, "*.json", CONFIG_FILE)
     obs.obs_properties_add_button(export_settings, "_export_btn", 'Export', on_export_config_pressed)
     obs.obs_properties_add_group(props, "_export", "Export Current Layout", obs.OBS_GROUP_NORMAL, export_settings)
 
@@ -334,7 +334,7 @@ def set_websocket(data, obsHost : str):
 def save_config(settings, file_path : str):
     try:
         save_to_file(file_path, json.dumps(settings_as_dict(settings)))
-        SCRIPT_CONTEXT.debug_message(f"Saved config to: {CONFIG_FILE}")
+        SCRIPT_CONTEXT.debug_message(f"Saved config to: {file_path}")
     except FileNotFoundError | ValueError as error:
         SCRIPT_CONTEXT.debug_message(f"Failed to save config file: {error}")
 
@@ -429,7 +429,6 @@ def swing_array_append_filters(swing_array, filters : list):
         try:
             item_as_json = create_list_item_json(filter["filterName"], filter["sourceName"], filter.get("displayName", None), filter.get("onColor", None))
             swing_item = obs.obs_data_create_from_json(item_as_json)
-            print(swing_item)
             obs.obs_data_array_push_back(swing_array, swing_item)
             obs.obs_data_release(swing_item)
         except:
