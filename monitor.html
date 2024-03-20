@@ -58,7 +58,7 @@
 		generateLayout(filterslist);
 	}
 
-	// Requests settings from the monitorconfig.py obs script
+	// Requests settings from the python script
 	async function refreshSettings(){
 		const refreshRequest = 'settings';
 		const url = `http://${obsSettingsHost}/?${refreshRequest}`;
