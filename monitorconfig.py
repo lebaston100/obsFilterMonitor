@@ -1,14 +1,15 @@
 import os
+import sys
 import obspython as obs
-import json 
+import json
+from configparser import RawConfigParser 
 import os.path
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
 from threading import Thread
 import time
 
-# TODO : Implement saving and loading settings to a json file (backup settings)
-# TODO : Implement retry/cancel craete server (UI Button and functions)
+
 
 
 class ReusableServer(TCPServer):
@@ -18,65 +19,83 @@ class ReusableServer(TCPServer):
 
 
 
-class ScriptContext:
+class SettingsServer:
     def __init__(self) -> None:
         self.http_service : ReusableServer = None
         self.server_running : bool = False
-        self.obs_properties = None
-        self.obs_data = None
-        self.debug : bool = False
         self.shutdown_requested : bool = False
 
 
-    def serve_settings(self):
+    def run(self):
         try:
-            self.server_running = True
             with ReusableServer(("", PORT), SettingsRequestHandler) as service:
+                self.server_running = True
                 self.http_service = service
-                self.debug_message(f"Serving on port {PORT}")
+                SCRIPT_CONTEXT.debug_message(f"Serving on port {PORT}")
                 service.serve_forever(0.5)
-                self.debug_message('Server shutdown.')
+                SCRIPT_CONTEXT.debug_message('Server shutdown. (This may be the previous server, if the script was reloaded.)')
         finally:
             self.server_running = False
             if self.http_service:
                 self.http_service.server_close()
                 self.http_service = None
 
-
-    def start_server_asynch(self, retry_delay : float = None, tiemout : float = None):
-        server_thread : Thread = Thread(name="HTTP Server", target=lambda: self.start_server(retry_delay, tiemout), daemon=True)
-        server_thread.start()
-
     
-    def start_server(self, retry_delay : float = None, tiemout : float = None):
+    def try_start_server(self, retry_delay : float = None, tiemout : float = None):
         self.shutdown_requested = False
-        start_time : float = time.process_time()
-        while tiemout == None or (time.process_time() - start_time) < tiemout:
+        start_time : float = time.time()
+        timed_out : bool = False
+        while tiemout == None or not timed_out:
+
             if self.shutdown_requested: break
             try:
-                self.debug_message('Starting settings server...')
-                self.serve_settings()
+                SCRIPT_CONTEXT.debug_message('Starting settings server...')
+                self.run()
             except BaseException as error:
-                self.debug_message(f'Unable to start server: {error}')
-                if self.shutdown_requested or retry_delay == None: break
+                SCRIPT_CONTEXT.debug_message(f'Unable to start server: {error}')
+                if retry_delay == None: continue
+                if self.shutdown_requested: break
                 time.sleep(retry_delay)
-            
-
-    def debug_message(self, msg : str):
-        if self.debug: print(msg)
+                timed_out = (time.time() - start_time) >= tiemout
+        if timed_out: SCRIPT_CONTEXT.print_error("Server timed out. Reload the script to try again.")
+        
 
     def shutdown_server(self):
         self.shutdown_requested = True
         if self.server_running:
             self.http_service.shutdown()
-    
-    def dereference_data(self):
+
+
+
+
+class ScriptContext:
+    def __init__(self) -> None:
         self.obs_properties = None
         self.obs_data = None
+        self.debug : bool = False
+        self.settings_server : SettingsServer = SettingsServer()
+            
+
+    def debug_message(self, msg : str):
+        if self.debug: print(msg)
+
+    def print_error(self, message : str):
+        print(message, file=sys.stderr)
+    
+    def clear(self):
+        self.obs_properties = None
+        self.obs_data = None
+
+
+    def start_server_asynch(self, retry_delay : float = None, tiemout : float = None):
+        self.__do_async("HTTP Server", lambda: self.settings_server.try_start_server(retry_delay, tiemout), as_daemon=True)
         
     def shutdown_server_async(self):
-        watcher_thread : Thread = Thread(name="Server Shutdown Watcher", target=self.shutdown_server, daemon=True)
-        watcher_thread.start()
+        self.__do_async("Server Shutdown Watcher", self.settings_server.shutdown_server, as_daemon=True)
+    
+    def __do_async(self, thread_name : str = None, task = None, as_daemon : bool = True):
+        thread : Thread = Thread(name=thread_name, target=task, daemon=as_daemon)
+        thread.start()
 
 
 
@@ -111,15 +130,17 @@ class SettingsRequestHandler(SimpleHTTPRequestHandler):
 
 SCRIPT_CONTEXT : ScriptContext = ScriptContext()
 DEFAULT_RETRY_FREQUENCY : float = 0.5
-DEFAULT_RETRY_DURATION : float = 10.0
+DEFAULT_RETRY_DURATION : float = 2.0
 PORT = 6005
-CONFIG_FILE : str = os.path.relpath(__file__) + os.path.sep + "config.json"
+SCRIPT_PATH : str = os.path.dirname(os.path.abspath(__file__)) + os.path.sep
+CONFIG_FILE : str = SCRIPT_PATH + "config.json"
+STATE_FILE : str = SCRIPT_PATH + "script_state.ini"
 
 
 
 
 def script_load(settings):
-    script_unload()
+    load_state()
     SCRIPT_CONTEXT.obs_data = settings
     SCRIPT_CONTEXT.start_server_asynch(DEFAULT_RETRY_FREQUENCY, DEFAULT_RETRY_DURATION)
 
@@ -128,61 +149,258 @@ def script_load(settings):
 
 def script_unload():
     SCRIPT_CONTEXT.shutdown_server_async()
-    SCRIPT_CONTEXT.dereference_data()
+    SCRIPT_CONTEXT.clear()
 
+
+
+
+def script_save(settings):
+    save_state()
 
 
 
 def script_defaults(settings):
     swing_array = obs.obs_data_array_create()
-    obs.obs_data_set_default_array(settings, "_filters", swing_array)
+    obs.obs_data_set_default_array(settings, "_filter_list", swing_array)
     obs.obs_data_set_default_string(settings, "_pass", "secret-password")
-    obs.obs_data_set_default_bool(settings, "_use_pass", False)
     obs.obs_data_set_default_string(settings, "_address", "127.0.0.1")
-    obs.obs_data_set_default_int(settings, "_port", 4455)
+    obs.obs_data_set_default_int(settings, "_port", int(4455))
     obs.obs_data_set_default_int(settings, "_color", int("ff32Cd32", 16))
-    obs.obs_data_array_release(swing_array)
 
 
 
 
 def script_description():
-    return "Add or remove filters from the filter monitor."
+    return "Add and remove filters from the OBS Filter Monitor."
+
+
+
+# Initializes UI elements
+def script_properties():
+
+    props = obs.obs_properties_create()
+
+    # Filter Monitor Elements
+    filter_group = obs.obs_properties_create()
+    obs.obs_properties_add_editable_list(filter_group, "_filter_list", "Filters: ", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
+
+    obs.obs_properties_add_text(filter_group, "_source", "Source: ", obs.OBS_TEXT_DEFAULT)
+    obs.obs_properties_add_text(filter_group, "_filter", "Filter: ", obs.OBS_TEXT_DEFAULT)
+    obs.obs_properties_add_text(filter_group, "_name", "Display Name: ", obs.OBS_TEXT_DEFAULT)
+    obs.obs_properties_add_color(filter_group, "_color", "Active Color: ")
+    obs.obs_properties_add_button(filter_group, "add_button", "Add Filter", on_add_filter_pressed)
+    obs.obs_properties_add_group(props, "_filter_monitor", "Filter Monitor Elements", obs.OBS_GROUP_NORMAL, filter_group)
+    
+    # OBS Websocket
+    obs_websocket_group = obs.obs_properties_create()
+    obs.obs_properties_add_text(obs_websocket_group, "_address", "Address: ", obs.OBS_TEXT_DEFAULT)
+    obs.obs_properties_add_int(obs_websocket_group, "_port", "Port: ", 0, 65535, 1)
+    obs.obs_properties_add_text(obs_websocket_group, "_pass", "Password: ", obs.OBS_TEXT_PASSWORD)
+    obs.obs_properties_add_group(props, "_obs_websocket", "OBS Websocket", obs.OBS_GROUP_NORMAL, obs_websocket_group)
+
+    # Import Layout
+    import_group = obs.obs_properties_create()
+    obs.obs_properties_add_path(import_group, "_import_path", "Import Path", obs.OBS_PATH_FILE, "*.json", SCRIPT_PATH)
+    
+    import_options = obs.obs_properties_add_list(import_group, "_import_method", "Import method", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+    obs.obs_property_list_add_string(import_options, 'Add Filters', "_import_add_filters")
+    obs.obs_property_list_add_string(import_options, 'Set Filters', "_import_set_filters")
+    obs.obs_property_list_add_string(import_options, 'Set Websocket', "_import_set_websocket")
+    obs.obs_property_list_add_string(import_options, 'Set All', "_import_set_all")
+
+    obs.obs_properties_add_button(import_group, "_import_btn", 'Import', on_import_config_pressed)
+    obs.obs_properties_add_group(props, "_import", "Import Layout", obs.OBS_GROUP_NORMAL, import_group)
+    
+    # Export Current Layout
+    export_settings = obs.obs_properties_create()
+    obs.obs_properties_add_path(export_settings, "_export_path", "Export Path:", obs.OBS_PATH_FILE_SAVE, "*.json", SCRIPT_PATH + os.path.sep + "config.json")
+    obs.obs_properties_add_button(export_settings, "_export_btn", 'Export', on_export_config_pressed)
+    obs.obs_properties_add_group(props, "_export", "Export Current Layout", obs.OBS_GROUP_NORMAL, export_settings)
+
+    # Debug Button
+    obs.obs_properties_add_button(props, "_debug", f'Debug {"Enabled" if SCRIPT_CONTEXT.debug else "Disabled"}', on_debug_toggled)
+
+    SCRIPT_CONTEXT.obs_properties = props
+
+    return props
 
 
 
 
-def on_debug_toggled(props, prop, *args, **kwargs):
-    SCRIPT_CONTEXT.debug = not SCRIPT_CONTEXT.debug
-    debug_btn = obs.obs_properties_get(props, "_debug")
-    obs.obs_property_set_description(debug_btn, f'Debug {"Enabled" if SCRIPT_CONTEXT.debug else "Disabled"}')
+def on_add_filter_pressed(props, prop, *args, **kwargs):
+    data = SCRIPT_CONTEXT.obs_data
+    add_filters(
+        data, [{
+            "filterName":obs.obs_data_get_string(data, "_filter"),
+            "sourceName":obs.obs_data_get_string(data, "_source"),
+            "displayName":obs.obs_data_get_string(data, "_name"),
+            "onColor":int_to_rgb_hex(obs.obs_data_get_int(data, "_color"))
+        }]
+    )
     return True
 
 
 
 
-def script_properties():
+def on_debug_toggled(props, prop):
+    SCRIPT_CONTEXT.debug = not SCRIPT_CONTEXT.debug
+    obs.obs_property_set_description(prop, f'Debug {"Enabled" if SCRIPT_CONTEXT.debug else "Disabled"}')
+    return True
 
-    props = obs.obs_properties_create()
-    obs.obs_properties_add_editable_list(props, "_filters", "Filters: ", obs.OBS_EDITABLE_LIST_TYPE_STRINGS, "", "")
 
-    obs.obs_properties_add_text(props, "_source", "Source: ", obs.OBS_TEXT_DEFAULT)
-    obs.obs_properties_add_text(props, "_filter", "Filter: ", obs.OBS_TEXT_DEFAULT)
-    obs.obs_properties_add_text(props, "_name", "Display Name: ", obs.OBS_TEXT_DEFAULT)
-    obs.obs_properties_add_color(props, "_color", "Active Color: ")
-    obs.obs_properties_add_button(props, "add_button", "Add Filter", on_add_filter_pressed)
 
-    obs.obs_properties_add_text(props, "_address", "Address: ", obs.OBS_TEXT_DEFAULT)
-    obs.obs_properties_add_int(props, "_port", "Port: ", 0, 65535, 1)
 
-    obs.obs_properties_add_text(props, "_pass", "Password: ", obs.OBS_TEXT_PASSWORD)
-    obs.obs_properties_add_button(props, "_debug", "Debug Disabled", on_debug_toggled)
+def on_export_config_pressed(props, prop):
+    data = SCRIPT_CONTEXT.obs_data
+    file_path : str = obs.obs_data_get_string(data, "_export_path")
+    save_config(data, file_path)
+    return True
 
-    #obs.obs_properties_add_button(props, "save_button", "Save Settings", save_config)
 
-    SCRIPT_CONTEXT.obs_properties = props
 
-    return props
+
+def on_import_config_pressed(props, prop):
+    data = SCRIPT_CONTEXT.obs_data
+    import_method = obs.obs_data_get_string(data, "_import_method")
+    file_path : str = obs.obs_data_get_string(data, "_import_path")
+
+    try:
+        filterList, password, host = load_config(data, file_path)
+
+        if import_method == "_import_add_filters":
+            if not filterList: raise ValueError("Missing filterlist")
+            add_filters(data, filterList)
+
+        if import_method == "_import_set_filters" or import_method == "_import_set_all":
+            if not filterList: raise ValueError("Missing filterlist")
+            set_filters(data, filterList)
+
+        if import_method == "_import_set_websocket" or import_method == "_import_set_all":
+            if not (host and password): raise ValueError("Missing obsHost and/or password")
+            set_websocket(data, host)
+            obs.obs_data_set_string(data, "_pass", password)
+
+    except FileNotFoundError or IsADirectoryError as error:
+        SCRIPT_CONTEXT.print_error(f"Unable to load config: {error}")
+    except ValueError as error:
+        raise ValueError(f"Unable to find requested keys in file: {error}")
+
+    return True
+
+
+
+
+def add_filters(data, filters : list):
+    swing_array = obs.obs_data_get_array(data, "_filter_list")
+    swing_array_append_filters(swing_array, filters)
+    obs.obs_data_array_release(swing_array)
+
+
+
+
+def set_filters(data, filters : list):
+    swing_array = obs.obs_data_array_create()
+    swing_array_append_filters(swing_array, filters)
+    prev_array = obs.obs_data_get_array(data, "_filter_list")
+    obs.obs_data_set_array(data, "_filter_list", swing_array)
+    obs.obs_data_array_release(prev_array)
+
+
+
+
+def get_filters(settings):
+    swing_array = obs.obs_data_get_array(settings, "_filter_list")
+    array_size = obs.obs_data_array_count(swing_array)
+    filters : list[dict] = []
+    for i in range(array_size):
+        swing_item = obs.obs_data_array_item(swing_array, i)
+        filters.append(swing_item_to_dict(swing_item))
+        obs.obs_data_release(swing_item)
+    obs.obs_data_array_release(swing_array)
+    return filters
+
+
+
+
+def set_websocket(data, obsHost : str):
+    address, port = obsHost.split(":")
+    obs.obs_data_set_int(data, "_port", int(port))
+    obs.obs_data_set_string(data, "_address", address)
+    
+
+
+
+
+def save_config(settings, file_path : str):
+    try:
+        save_to_file(file_path, json.dumps(settings_as_dict(settings)))
+        SCRIPT_CONTEXT.debug_message(f"Saved config to: {CONFIG_FILE}")
+    except FileNotFoundError | ValueError as error:
+        SCRIPT_CONTEXT.debug_message(f"Failed to save config file: {error}")
+
+
+
+
+def load_config(data, file_path : str):
+    config : dict = json.loads(load_from_file(file_path))
+    return config.get("filterlist", None), config.get("obsPassword", None), config.get("obsHost", None)
+
+
+
+
+
+def save_state():
+    try:
+        parser = RawConfigParser()
+        parser.add_section("STATE")
+        parser["STATE"]['debug'] = 'enabled' if SCRIPT_CONTEXT.debug else 'disabled'
+        mode : str = get_available_write_mode(STATE_FILE)
+        with open(STATE_FILE, mode) as file:
+            parser.write(file)
+        SCRIPT_CONTEXT.debug_message(f"State saved to: {STATE_FILE}")
+    except BaseException as error:
+        SCRIPT_CONTEXT.debug_message(f"Error saving state: {error}")
+
+
+
+
+def load_state():
+    if not os.path.isfile(STATE_FILE): return
+    parser = RawConfigParser()
+    parser.read(STATE_FILE)
+    SCRIPT_CONTEXT.debug = (parser['STATE']['debug'] == 'enabled')
+
+
+
+
+def save_to_file(file_path : str, data : str):
+    mode : str = get_available_write_mode(file_path)
+    with open(file_path, mode) as file:
+        file.write(data)
+
+
+
+
+def load_from_file(file_path : str) -> str:
+    file_path = os.path.abspath(file_path)
+    if not os.path.exists(file_path): raise FileNotFoundError(f"Unable to locate config file: {file_path}")
+    if not os.path.isfile(file_path): raise IsADirectoryError(f"Path is not a file: {file_path}")
+    data : str
+    with open(file_path) as file:
+        data = file.read()
+    return data
+
+
+
+
+def get_available_write_mode(file_path : str):
+    file_path = os.path.abspath(file_path)
+    if os.path.isfile(file_path): return "w"
+
+    parent_dir = os.path.dirname(file_path)
+    if os.path.isdir(parent_dir): return "x"
+        
+    raise FileNotFoundError(f'Requested directory does not exist: {parent_dir}')
 
 
 
@@ -199,20 +417,6 @@ def settings_as_dict(settings) -> dict:
 
 
 
-def get_filters(settings):
-    swing_array = obs.obs_data_get_array(settings, "_filters")
-    array_size = obs.obs_data_array_count(swing_array)
-    filters : list[dict] = []
-    for i in range(array_size):
-        swing_item = obs.obs_data_array_item(swing_array, i)
-        filters.append(swing_item_to_dict(swing_item))
-        obs.obs_data_release(swing_item)
-    obs.obs_data_array_release(swing_array)
-    return filters
-
-
-
-
 def swing_item_to_dict(swing_array_item) -> dict:
     obj = obs.obs_data_get_json(swing_array_item)
     return json.loads(json.loads(obj)["value"])
@@ -220,37 +424,16 @@ def swing_item_to_dict(swing_array_item) -> dict:
 
 
 
-def save_config():
-    mode : str = "w" if os.path.exists(CONFIG_FILE) else "x"
-    with open(CONFIG_FILE, mode) as file:
-        file.write(json.dumps(settings_as_dict()))
-
-
-
-## TODO : remove or integrate
-def load_config() :
-    if not os.path.exists(CONFIG_FILE): raise FileNotFoundError("Unable to locate config file: %s" % os.path.abspath(CONFIG_FILE))
-    with open(CONFIG_FILE, "r") as file:
-        json_str : str = file.read()
-    config : dict = json.loads(s=file.read())
-    filters = config["filterlist"]
-    hostAddress = config["hostAddress"]
-    port = config["port"]
-    obsPassword = config["obsPassword"]
-
-
-
-
-def on_add_filter_pressed(props, prop, *args, **kwargs):
-    data = SCRIPT_CONTEXT.obs_data
-    add_filter(
-        data,
-        filterName=obs.obs_data_get_string(data, "_filter"),
-        sourceName=obs.obs_data_get_string(data, "_source"),
-        displayName=obs.obs_data_get_string(data, "_name"),
-        onColor=int_to_rgb_hex(obs.obs_data_get_int(data, "_color"))
-    )
-    return True
+def swing_array_append_filters(swing_array, filters : list):
+    for filter in filters:
+        try:
+            item_as_json = create_list_item_json(filter["filterName"], filter["sourceName"], filter.get("displayName", None), filter.get("onColor", None))
+            swing_item = obs.obs_data_create_from_json(item_as_json)
+            print(swing_item)
+            obs.obs_data_array_push_back(swing_array, swing_item)
+            obs.obs_data_release(swing_item)
+        except:
+            SCRIPT_CONTEXT.debug_message(f"Failed to parse filter: {json.dumps(filter)}")
 
 
 
@@ -263,18 +446,6 @@ def int_to_rgb_hex(num : int) -> str:
     b = hex_str[4:6]
     
     return "".join(('#', r, g, b))
-
-
-
-def add_filter(data, filterName : str, sourceName : str, displayName : str = None, onColor : str = None):
-    swing_array = obs.obs_data_get_array(data, "_filters")
-    item_as_json = create_list_item_json(filterName, sourceName, displayName, onColor)
-    swing_item = obs.obs_data_create_from_json(item_as_json)
-    SCRIPT_CONTEXT.debug_message(swing_item)
-    obs.obs_data_array_push_back(swing_array, swing_item)
-    obs.obs_data_set_array(data, "_filters", swing_array)
-    obs.obs_data_release(swing_item)
-    obs.obs_data_array_release(swing_array)
 
 
 
