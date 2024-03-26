@@ -40,6 +40,9 @@
 
 	// The settings server ip and port (Usually the ip is that of the obs machine)
 	var obsSettingsHost = "127.0.0.1:6005"
+
+	// Weather to fetch settings from the settings server
+	var useSettingsServer = true;
 	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
@@ -53,7 +56,7 @@
 	
 	// initialize
 	async function init() {
-		await refreshSettings();
+		if(useSettingsServer) await refreshSettings();
 		attemptConnection();
 		generateLayout(filterslist);
 	}
@@ -236,8 +239,7 @@
 				lines += `<img f="${item["filterName"]}" s="${item["sourceName"]}" src="" onclick="imageClicked(this);" /></div>`;
 			}
 		});
-		htmlButtons = document.getElementById("filterlist")
-		htmlButtons.innerHTML = lines;
+		document.getElementById("filterlist").innerHTML = lines;
 	}
 
 	function toggleErrorDivVisibility(hidden = True, message = "") {
