@@ -7,3 +7,8 @@
 ehthumbs.db
 Thumbs.db
 *.code-workspace
+
+# Monitor Config
+config.json
+script_state.ini
+__pycache__
