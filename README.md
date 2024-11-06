@@ -18,12 +18,10 @@ This tool shows if one or multiple filters are enabled or disabled. Runs inside 
 - Start OBS, open the "Tools" menu and select "Scripts"
 - Ensure a valid [Python 3.6.x](https://www.python.org/downloads/) Install Path is defined in the "Python Settings" tab
 - Add "[filter-monitor-config.py](./filter-monitor-config.py)" to the "Loaded Scripts" list in the "Scripts" tab
-- Select "filter-monitor-config" from the "Loaded Scripts" list, and configure OBS Filter Monitor to your liking, then refresh the monitor.html dock to load the new settings
+- Select "filter-monitor-config" from the "Loaded Scripts" list and configure OBS Filter Monitor to your liking
+- refresh the monitor.html to load the new settings
 
 **Important**: Ensure the "[useSettingsServer](./monitor.html#L45)" field within monitor.html is set to "true" in order to configure the monitor using filter-monitor-config.
-
-[Comment]: <> (Temporary image link)
-![Example image](https://private-user-images.githubusercontent.com/102550532/314358838-c2916662-ee9d-4064-9446-c46bd6d6bd76.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MzA4NTEyMjQsIm5iZiI6MTczMDg1MDkyNCwicGF0aCI6Ii8xMDI1NTA1MzIvMzE0MzU4ODM4LWMyOTE2NjYyLWVlOWQtNDA2NC05NDQ2LWM0NmJkNmQ2YmQ3Ni5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BS0lBVkNPRFlMU0E1M1BRSzRaQSUyRjIwMjQxMTA1JTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI0MTEwNVQyMzU1MjRaJlgtQW16LUV4cGlyZXM9MzAwJlgtQW16LVNpZ25hdHVyZT1kMDRmYmM4NWMxN2Q2MWQ2NGY4OWEyMjRiMWVlYTZmMjRhMzEwZjQ3ZjBiMjk3MWM3NTBhOWQxN2EyMGFlOTk4JlgtQW16LVNpZ25lZEhlYWRlcnM9aG9zdCJ9.gSP0iZmCQ-sOjlSyQQfMt3Pi1WgAPjBA-Z4zF5ouUW8.jpg) 
 
 
 ### Manual Configuration
@@ -54,7 +52,7 @@ If you want to generate the css color codes, search google for "css color picker
 
 If "Enable Websocket server" was checked and you have a password then make sure to update the "obsPassword" config option in line 38.
 
-**Important**: Ensure the "[useSettingsServer](./monitor.html#L45)" field within monitor.html is set to "false" to stop the monitor from attempting to fetch settings from filter-monitor-config.
+**Important**: Ensure the "[useSettingsServer](./monitor.html#L45)" field within "monitor.html" is set to "false" when using a manual configuration.
 
 ### Setup inside OBS
 
