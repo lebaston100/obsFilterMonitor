@@ -4,7 +4,7 @@
 	<meta charset="utf-8">
 	<title>OBS Filter Monitor</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.1/dist/obs-ws.min.js" integrity="sha256-UbkntZrYTokZf8tldcF9nmOn5CNgcmDP+MNsUcKUpEE=" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0/dist/obs-ws.global.min.js"></script>
 	<!-- <script src="obs-ws.min.js"></script> -->
 	<script>
 	// you can set which filters you want to monitor in here, please follow this style (there is no , after the last element in the list)
@@ -36,6 +36,7 @@
 	var obsHost = "127.0.0.1:4455";
 
 	// The obs-websocket password (if set)
+
 	var obsPassword = "secret-password";
 
 	// The settings server ip and port (Usually the ip is that of the obs machine)
@@ -43,6 +44,9 @@
 
 	// Weather to fetch settings from the settings server
 	var useSettingsServer = true;
+
+	const obsPassword = "YourPasswordHERE";
+
 	
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	

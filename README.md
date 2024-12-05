@@ -4,14 +4,20 @@ This tool shows if one or multiple filters are enabled or disabled. Runs inside 
 
 ### Requirements
 
-- OBS 28 and up
+- OBS 30 and up
 
 ### Setup
 
 - Start OBS, open the "Tools" menu and select "obs-websocket Settings"
-- Make sure that "Enable Websocket server" is checked, "Server Port" is 4455
-- Copy the websocket password(If "Enable Authentication" is enabled) for later by clicking on "Show Connect Info"-Button -> Next to the "Server Password" field -> "Copy"-Button
-- [Download this repository](https://github.com/lebaston100/obsFilterMonitor/archive/master.zip) or clone it (you only need the monitor.html file)
+- Make sure that "Enable Websocket server" is checked
+- [Download this repository](https://github.com/lebaston100/obsFilterMonitor/archive/master.zip) and unpack or clone it
+
+Simple setup on windows:
+- Launch the "transferSettings.bat". This will find the configuration values in your locally installed obs and put them into the right place for you. This can only be done once.
+
+Setup otherwise:
+- (If "Enable Authentication" is enabled) In the "obs-websocket Settings" copy the websocket password for later by clicking on "Show Connect Info"-Button -> Next to the "Server Password" field -> "Copy"-Button
+- Make sure that "Server Port" is 4455
 
 ### Configuration using Python script
 
@@ -70,7 +76,7 @@ If you know what you are doing you can create a firewall exception for the obs-w
 
 You can create custom overlay symbols(the X or off text) by making a transparent 40x30 png image and then encoding it in base64. Then add that as a new variable and specify it as the defaultOffSymbol.
 
-If you want to use the tool offline aka without an internet connection you need to download [this file](https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.1/dist/obs-ws.min.js) making sure not to rename it, place it in the same folder as the monitor.html, uncomment line 8 and comment out line 7(also in the monitor.html).
+If you want to use the tool offline aka without an internet connection you need to download [this file](https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0/dist/obs-ws.global.min.js) making sure not to rename it, place it in the same folder as the monitor.html, uncomment line 8 and comment out line 7(also in the monitor.html).
 
 ### Help
 
