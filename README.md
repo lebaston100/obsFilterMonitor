@@ -10,10 +10,11 @@ This tool shows if one or multiple filters are enabled or disabled. Runs inside 
 
 - Start OBS, open the "Tools" menu and select "obs-websocket Settings"
 - Make sure that "Enable Websocket server" is checked
-- [Download this repository](https://github.com/lebaston100/obsFilterMonitor/archive/master.zip) and unpack or clone it
+- [Download this repository](https://github.com/lebaston100/obsFilterMonitor/archive/master.zip) and unpack or git clone it
 
-Simple setup on windows:
-- Launch the "transferSettings.bat". This will find the configuration values in your locally installed obs and put them into the right place for you. This can only be done once.
+Simple setup on windows when not using configuration manager script:
+- Launch the "transferSettings.bat". This will find the configuration values in your locally installed obs and put them into the right place for you.  
+This can only be done once and also will disable use of the settings python script.
 
 Setup otherwise:
 - (If "Enable Authentication" is enabled) In the "obs-websocket Settings" copy the websocket password for later by clicking on "Show Connect Info"-Button -> Next to the "Server Password" field -> "Copy"-Button
@@ -22,15 +23,18 @@ Setup otherwise:
 ### Configuration using Python script
 
 - Start OBS, open the "Tools" menu and select "Scripts"
-- Ensure a valid [Python 3.6.x](https://www.python.org/downloads/) Install Path is defined in the "Python Settings" tab
+- Ensure a valid Python <= 3.11 Install Path is defined in the "Python Settings" tab
 - Add "[filter-monitor-config.py](./filter-monitor-config.py)" to the "Loaded Scripts" list in the "Scripts" tab
-- Select "filter-monitor-config" from the "Loaded Scripts" list and configure OBS Filter Monitor to your liking
+- Select "filter-monitor-config" from the "Loaded Scripts" list
+- Update the OBS Websocket Settings from the OBS Websocket Settings window (Address/Port/Password) if websocket authentication is enabled
+- To add a new monitor element, below the "Filters" list, input the "Source" name, "Filter" name, "Display Name" and optionally a different "Active Color" and press the "Add FIlter" button.
+- Unless you know what you are doing please don't edit the filter configurations inside the filters list by hand. To edit, remove the line and use the normal way to add a new filter.
 - refresh the monitor.html to load the new settings
 
-**Important**: Ensure the "[useSettingsServer](./monitor.html#L45)" field within monitor.html is set to "true" in order to configure the monitor using filter-monitor-config.
+**Important**: Ensure the "[useSettingsServer](./monitor.html#L45)" field within monitor.html is set to "true" in order to configure the monitor using filter-monitor-config. To get faster initial page loading when not using the settings script, set this to "false".
 
 
-### Manual Configuration
+### Manual Configuration (without settings script)
 
 Manual configuration can be done by editing the monitor.html file with a normal text editor. You also only need this file (and the websocket lib auto-loaded from the internet) to run everything, all the other files (and the icons folder) is just there for project management purposes or if you want to customize stuff.
 
@@ -72,14 +76,17 @@ To create a custom dock that can be made part of the main OBS window, follow the
 
 ### Advanced usage
 
-If you know what you are doing you can create a firewall exception for the obs-websocket port and modify the ip address in line 35 to be able to run this on any device in the network.
+If you know what you are doing you can create a firewall exception for the obs-websocket port and modify the ip address in line 36 to be able to run this on any device in the network.
 
-You can create custom overlay symbols(the X or off text) by making a transparent 40x30 png image and then encoding it in base64. Then add that as a new variable and specify it as the defaultOffSymbol.
+The host for the settings script web server can be changed in line 42.
 
-If you want to use the tool offline aka without an internet connection you need to download [this file](https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0/dist/obs-ws.global.min.js) making sure not to rename it, place it in the same folder as the monitor.html, uncomment line 8 and comment out line 7(also in the monitor.html).
+You can create custom overlay symbols(the X or off text) by making a transparent 40x30 png image and then encoding it in base64. Then add that as a new variable and specify it as the defaultOffSymbol (line 30).
+
+If you want to use the tool offline aka without an internet connection you need to download [this file](https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0/dist/obs-ws.global.min.js) making sure not to rename it, place it in the same folder as the monitor.html, uncomment line 8 and comment out line 7 (also in the monitor.html).
 
 ### Help
 
 You have trouble setting it up or found a bug, then join my [Discord Server](https://discord.gg/PCYQJwX)
 
-Thanks to [Strike](https://www.twitch.tv/strike) for the idea for this.
+Thanks to [Strike](https://www.twitch.tv/strike) for the idea for this.  
+Thanks to [theCYBRIX](https://github.com/theCYBRIX) for adding the configuration script.

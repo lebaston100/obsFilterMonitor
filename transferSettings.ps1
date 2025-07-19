@@ -35,4 +35,5 @@ $destinationFile = "monitor.html"
 $controller = Get-Content -Path $destinationFile
 $controller = $controller -creplace "YourPasswordHERE", $server_password
 $controller = $controller -creplace "4455", $server_port
+$controller = $controller -creplace "useSettingsServer = true", "useSettingsServer = false"
 $controller | Set-Content -Path $destinationFile

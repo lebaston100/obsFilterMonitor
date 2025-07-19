@@ -1,6 +1,6 @@
 import os
 import sys
-import obspython as obs
+import obspython as obs # type: ignore
 import json
 from configparser import RawConfigParser
 import os.path
@@ -17,11 +17,11 @@ class ReusableServer(TCPServer):
 
 class SettingsServer:
     def __init__(self) -> None:
-        self.http_service: ReusableServer = None
+        self.http_service: ReusableServer | None = None
         self.server_running: bool = False
         self.shutdown_requested: bool = False
 
-    def run(self):
+    def run(self) -> None:
         try:
             with ReusableServer(("", PORT), SettingsRequestHandler) as service:
                 self.server_running = True
@@ -36,11 +36,11 @@ class SettingsServer:
                 self.http_service.server_close()
                 self.http_service = None
 
-    def try_start_server(self, retry_delay: float = None, tiemout: float = None):
+    def try_start_server(self, retry_delay: float | None = None, timeout: float | None = None) -> None:
         self.shutdown_requested = False
         start_time: float = time.time()
         timed_out: bool = False
-        while tiemout == None or not timed_out:
+        while timeout == None or not timed_out:
 
             if self.shutdown_requested:
                 break
@@ -55,14 +55,14 @@ class SettingsServer:
                 if self.shutdown_requested:
                     break
                 time.sleep(retry_delay)
-                timed_out = (time.time() - start_time) >= tiemout
+                timed_out = (time.time() - start_time) >= (timeout or 2.0)
         if timed_out:
             SCRIPT_CONTEXT.print_error(
                 "Server timed out. Reload the script to try again.")
 
-    def shutdown_server(self):
+    def shutdown_server(self) -> None:
         self.shutdown_requested = True
-        if self.server_running:
+        if self.server_running and self.http_service:
             self.http_service.shutdown()
 
 
@@ -73,33 +73,33 @@ class ScriptContext:
         self.debug: bool = False
         self.settings_server: SettingsServer = SettingsServer()
 
-    def debug_message(self, msg: str):
+    def debug_message(self, msg: str) -> None:
         if self.debug:
             print(msg)
 
-    def print_error(self, message: str):
+    def print_error(self, message: str) -> None:
         print(message, file=sys.stderr)
 
-    def clear(self):
+    def clear(self) -> None:
         self.obs_properties = None
         self.obs_data = None
 
-    def start_server_asynch(self, retry_delay: float = None, tiemout: float = None):
+    def start_server_asynch(self, retry_delay: float | None = None, timeout: float | None = None) -> None:
         self.__do_async("HTTP Server", lambda: self.settings_server.try_start_server(
-            retry_delay, tiemout), as_daemon=True)
+            retry_delay, timeout), as_daemon=True)
 
     def shutdown_server_async(self):
         self.__do_async("Server Shutdown Watcher",
                         self.settings_server.shutdown_server, as_daemon=True)
 
-    def __do_async(self, thread_name: str = None, task=None, as_daemon: bool = True):
+    def __do_async(self, thread_name: str | None = None, task=None, as_daemon: bool = True) -> None:
         thread: Thread = Thread(
             name=thread_name, target=task, daemon=as_daemon)
         thread.start()
 
 
 class SettingsRequestHandler(SimpleHTTPRequestHandler):
-    def do_GET(self):
+    def do_GET(self) -> None:
         SCRIPT_CONTEXT.debug_message("Received request: " + self.path)
 
         query_param = self.path
@@ -111,7 +111,7 @@ class SettingsRequestHandler(SimpleHTTPRequestHandler):
                             "Monitor config only supports settings requests.")
             SCRIPT_CONTEXT.debug_message("Request rejected.")
 
-    def handle_settings_request(self):
+    def handle_settings_request(self) -> None:
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -135,23 +135,23 @@ CONFIG_FILE: str = SCRIPT_PATH + "config.json"
 STATE_FILE: str = SCRIPT_PATH + "script_state.ini"
 
 
-def script_load(settings):
+def script_load(settings) -> None:
     load_state()
     SCRIPT_CONTEXT.obs_data = settings
     SCRIPT_CONTEXT.start_server_asynch(
         DEFAULT_RETRY_FREQUENCY, DEFAULT_RETRY_DURATION)
 
 
-def script_unload():
+def script_unload() -> None:
     SCRIPT_CONTEXT.shutdown_server_async()
     SCRIPT_CONTEXT.clear()
 
 
-def script_save(settings):
+def script_save(settings) -> None:
     save_state()
 
 
-def script_defaults(settings):
+def script_defaults(settings) -> None:
     swing_array = obs.obs_data_array_create()
     obs.obs_data_set_default_array(settings, "_filter_list", swing_array)
     obs.obs_data_set_default_string(settings, "_pass", "secret-password")
@@ -161,8 +161,9 @@ def script_defaults(settings):
     obs.obs_data_set_default_string(settings, "_browser_dock_name", "Filter Monitor")
 
 
-def script_description():
-    return "<h1>OBS Filter Monitor Config</h1>\nAdd and remove filters from OBS Filter Monitor on the fly."
+def script_description() -> str:
+    return "<h1>OBS Filter Monitor Config</h1>\nAdd and remove filters from OBS Filter Monitor on the fly." \
+        + "<br>To update the Dock after modifying settings, right-glick it and select \"refresh\"."
 
 
 # Initializes UI elements
@@ -187,13 +188,6 @@ def script_properties():
     obs.obs_properties_add_group(
         props, "_filter_monitor", "Filter Monitor Elements", obs.OBS_GROUP_NORMAL, filter_group)
 
-    # Filter Monitor Browser Dock
-    browser_dock_group = obs.obs_properties_create()
-    obs.obs_properties_add_text(
-        browser_dock_group, "_browser_dock_name", "Name: ", obs.OBS_TEXT_DEFAULT)
-    obs.obs_properties_add_group(
-        props, "_browser_dock", "Filter Monitor Browser Dock", obs.OBS_GROUP_NORMAL, browser_dock_group)
-
     # OBS Websocket
     obs_websocket_group = obs.obs_properties_create()
     obs.obs_properties_add_text(
@@ -203,7 +197,7 @@ def script_properties():
     obs.obs_properties_add_text(
         obs_websocket_group, "_pass", "Password: ", obs.OBS_TEXT_PASSWORD)
     obs.obs_properties_add_group(
-        props, "_obs_websocket", "OBS Websocket", obs.OBS_GROUP_NORMAL, obs_websocket_group)
+        props, "_obs_websocket", "OBS Websocket Settings", obs.OBS_GROUP_NORMAL, obs_websocket_group)
 
     # Import Layout
     import_group = obs.obs_properties_create()
@@ -243,8 +237,7 @@ def script_properties():
 
     return props
 
-
-def on_add_filter_pressed(props, prop, *args, **kwargs):
+def on_add_filter_pressed(props, prop, *args, **kwargs) -> bool:
     data = SCRIPT_CONTEXT.obs_data
     add_filters(
         data, [{
@@ -257,21 +250,21 @@ def on_add_filter_pressed(props, prop, *args, **kwargs):
     return True
 
 
-def on_debug_toggled(props, prop):
+def on_debug_toggled(props, prop) -> bool:
     SCRIPT_CONTEXT.debug = not SCRIPT_CONTEXT.debug
     obs.obs_property_set_description(
         prop, f'Debug {"Enabled" if SCRIPT_CONTEXT.debug else "Disabled"}')
     return True
 
 
-def on_export_config_pressed(props, prop):
+def on_export_config_pressed(props, prop) -> bool:
     data = SCRIPT_CONTEXT.obs_data
     file_path: str = obs.obs_data_get_string(data, "_export_path")
     save_config(data, file_path)
     return True
 
 
-def on_import_config_pressed(props, prop):
+def on_import_config_pressed(props, prop) -> bool:
     data = SCRIPT_CONTEXT.obs_data
     import_method = obs.obs_data_get_string(data, "_import_method")
     file_path: str = obs.obs_data_get_string(data, "_import_path")
@@ -303,13 +296,13 @@ def on_import_config_pressed(props, prop):
     return True
 
 
-def add_filters(data, filters: list):
+def add_filters(data, filters: list) -> None:
     swing_array = obs.obs_data_get_array(data, "_filter_list")
     swing_array_append_filters(swing_array, filters)
     obs.obs_data_array_release(swing_array)
 
 
-def set_filters(data, filters: list):
+def set_filters(data, filters: list) -> None:
     swing_array = obs.obs_data_array_create()
     swing_array_append_filters(swing_array, filters)
     prev_array = obs.obs_data_get_array(data, "_filter_list")
@@ -329,13 +322,13 @@ def get_filters(settings):
     return filters
 
 
-def set_websocket(data, obsHost: str):
+def set_websocket(data, obsHost: str) -> None:
     address, port = obsHost.split(":")
     obs.obs_data_set_int(data, "_port", int(port))
     obs.obs_data_set_string(data, "_address", address)
 
 
-def save_config(settings, file_path: str):
+def save_config(settings, file_path: str) -> None:
     try:
         save_to_file(file_path, json.dumps(settings_as_dict(settings)))
         SCRIPT_CONTEXT.debug_message(f"Saved config to: {file_path}")
@@ -343,12 +336,12 @@ def save_config(settings, file_path: str):
         SCRIPT_CONTEXT.debug_message(f"Failed to save config file: {error}")
 
 
-def load_config(data, file_path: str):
+def load_config(data, file_path: str) -> tuple:
     config: dict = json.loads(load_from_file(file_path))
     return config.get("filterlist", None), config.get("obsPassword", None), config.get("obsHost", None)
 
 
-def save_state():
+def save_state() -> None:
     try:
         parser = RawConfigParser()
         parser.add_section("STATE")
@@ -361,7 +354,7 @@ def save_state():
         SCRIPT_CONTEXT.debug_message(f"Error saving state: {error}")
 
 
-def load_state():
+def load_state() -> None:
     if not os.path.isfile(STATE_FILE):
         return
     parser = RawConfigParser()
@@ -369,7 +362,7 @@ def load_state():
     SCRIPT_CONTEXT.debug = (parser['STATE']['debug'] == 'enabled')
 
 
-def save_to_file(file_path: str, data: str):
+def save_to_file(file_path: str, data: str) -> None:
     mode: str = get_available_write_mode(file_path)
     with open(file_path, mode) as file:
         file.write(data)
@@ -387,7 +380,7 @@ def load_from_file(file_path: str) -> str:
     return data
 
 
-def get_available_write_mode(file_path: str):
+def get_available_write_mode(file_path: str) -> str:
     file_path = os.path.abspath(file_path)
     if os.path.isfile(file_path):
         return "w"
@@ -415,7 +408,7 @@ def swing_item_to_dict(swing_array_item) -> dict:
     return json.loads(json.loads(obj)["value"])
 
 
-def swing_array_append_filters(swing_array, filters: list):
+def swing_array_append_filters(swing_array, filters: list) -> None:
     for filter in filters:
         try:
             item_as_json = create_list_item_json(filter["filterName"], filter["sourceName"], filter.get(
@@ -438,7 +431,7 @@ def int_to_rgb_hex(num: int) -> str:
     return "".join(('#', r, g, b))
 
 
-def create_list_item_json(filterName: str, sourceName: str, displayName: str = None, onColor: str = None) -> str:
+def create_list_item_json(filterName: str, sourceName: str, displayName: str | None = None, onColor: str | None = None) -> str:
     filter = '{\\\"filterName\\\": \\\"%s\\\", \\\"sourceName\\\": \\\"%s\\\"' % (
         filterName, sourceName)
     if displayName != None:
